@@ -1,5 +1,5 @@
-## Explicit, single-owner frame scope. One pipeline at a time per GL context;
-## do not copy live pipelines or interleave them with foreign framebuffer/VAO state.
+## Shared-handle frame scope. Aliases share state/disposal, not independent frames.
+## One pipeline at a time per context; no foreign framebuffer/VAO interleaving.
 import ./[types, post_types]
 export post_types
 when defined(js):
@@ -7,7 +7,7 @@ when defined(js):
 else:
   import ./backends/gles as backend
 
-type Pipeline* = object
+type Pipeline* = ref object
   context: backend.Context
   target: backend.PostTarget
   post: backend.PostPass
@@ -20,19 +20,22 @@ proc initPipeline*(context: backend.Context; caps: Capabilities;
                    maxTargetPixels = DefaultTargetPixels): Pipeline =
   if maxTargetPixels < 1 or maxTargetPixels > high(int32) div 6:
     raise newException(ValueError,"Invalid post pixel budget")
+  new(result)
   result.context = context
   result.modern = caps.api in {webgl2,gles3}
   result.budget = maxTargetPixels
   if result.modern: result.limit = backend.targetLimit(context)
   result.alive = true
 
-proc renderSize*(p: Pipeline): SurfaceSize = (p.rw,p.rh)
+proc renderSize*(p: Pipeline): SurfaceSize =
+  if p.isNil or not p.alive: raise newException(ValueError,"Pipeline is disposed")
+  (p.rw,p.rh)
 
 proc beginFrame*(p: var Pipeline; width,height: int;
                  settings = defaultPost()): bool =
   ## Returns false for a minimized/zero-sized surface. Scene draws within this
   ## scope MUST use renderSize and clear=false. Camera aspect uses OUTPUT size.
-  if not p.alive: raise newException(ValueError,"Pipeline is disposed")
+  if p.isNil or not p.alive: raise newException(ValueError,"Pipeline is disposed")
   if p.active: raise newException(ValueError,"Frame already active")
   settings.validate()
   let scaled = scaledSize(width,height,settings.scale)
@@ -72,12 +75,12 @@ proc beginFrame*(p: var Pipeline; width,height: int;
 
 proc cancelFrame*(p: var Pipeline) =
   ## No presentation; useful in finally after an exception. Idempotent.
-  if p.active:
-    backend.defaultTarget(p.context)
-    p.active = false
+  if not p.isNil and p.active:
+    try: backend.defaultTarget(p.context)
+    finally: p.active = false
 
 proc endFrame*(p: var Pipeline) =
-  if not p.alive or not p.active: raise newException(ValueError,"No active frame")
+  if p.isNil or not p.alive or not p.active: raise newException(ValueError,"No active frame")
   try:
     if p.offscreen:
       backend.present(p.context,p.post,p.target,p.w,p.h,p.rw,p.rh,p.settings)
@@ -88,7 +91,8 @@ proc endFrame*(p: var Pipeline) =
     p.cancelFrame()
 
 proc dispose*(p: var Pipeline) =
-  if not p.alive: return
+  if p.isNil or not p.alive: return
+  p.alive = false # invalidate aliases even if a driver call throws
   p.cancelFrame()
   backend.destroyTarget(p.context,p.target)
   backend.destroyPost(p.context,p.post)
@@ -98,4 +102,8 @@ proc dispose*(p: var Pipeline) =
 proc abandon*(p: var Pipeline) =
   ## Context LOST only: forget invalid handles without issuing any GL calls.
   ## Recreate with initPipeline on the restored context.
-  p = default(Pipeline)
+  if p.isNil: return
+  p.alive = false
+  p.active = false
+  p.postReady = false
+  p.stats.allocatedBytes = 0

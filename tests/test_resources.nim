@@ -57,3 +57,28 @@ for iteration in 0..<1000:
     for col in 0..<w: expected[(y+row)*7+x+col] = delta[row*w+col]
   doAssert map.pixels == expected
 echo "indexed meshes + owner deltas: OK, cells=", map.pixels.len
+# Default handles reject work without touching GL; cleanup is nil-safe.
+var absentRenderer: Renderer
+var absentPipeline: Pipeline
+absentRenderer.dispose()
+absentRenderer.abandon()
+absentPipeline.dispose()
+absentPipeline.abandon()
+absentPipeline.cancelFrame()
+rejected = false
+try: absentRenderer.render(1,1)
+except ValueError: rejected = true
+doAssert rejected
+rejected = false
+try: discard absentRenderer.instanceMode()
+except ValueError: rejected = true
+doAssert rejected
+rejected = false
+try: discard absentPipeline.beginFrame(1,1)
+except ValueError: rejected = true
+doAssert rejected
+rejected = false
+try: discard absentPipeline.renderSize()
+except ValueError: rejected = true
+doAssert rejected
+echo "Nil resource handles reject work / cleanup safe PASS"

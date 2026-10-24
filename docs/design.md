@@ -174,3 +174,10 @@ individual plane tests. Region лишь задаёт buckets, не ограни�
 позиции. Host явно rebuild-ит при смене snapshot. Flat API остаётся oracle и
 простым путём для малых сцен; query сохраняет стабильный порядок за O(N) scan.
 См. validation-grid.md; аппаратные performance claims не добавлены.
+
+## Уточнение после четырнадцатого среза
+
+Renderer/Pipeline переведены на shared reference identity: aliases разделяют
+cache/state/lifetime. Dispose/abandon инвалидируют их вместе; explicit cleanup
+остаётся обязанностью host, не GC. Timer pool и context identity/interleaving
+ограничения пока отдельные задачи. См. validation-lifetime.md.

@@ -301,3 +301,10 @@ float32 snapshot и пропускают одинаковые submissions. Ст�
 порядок индексов и отсеивает группы conservative AABBs. Полезно для больших
 статических/редко меняющихся batches; query всё ещё сканирует marks для стабильного
 порядка. Стоимость, инвалидация cache и тесты: [uniform grid](docs/validation-grid.md).
+
+## Resource handle lifetime
+
+`Renderer` и `Pipeline` — shared handles: assignment разделяет один ресурс,
+state и stats. `dispose` через любой alias инвалидирует все ссылки; повторный
+вызов безопасен. При context loss используйте `abandon`, затем новый `init…`.
+Это изменение value-copy semantics; [контракт и границы](docs/validation-lifetime.md).

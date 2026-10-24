@@ -204,6 +204,9 @@ onEvent(surface, "webglcontextlost", proc(e: JsObject) =
   e.preventDefault()
   lost = true
   lastMs = 0
+  renderer.abandon()
+  cars.abandon()
+  sky.abandon()
   pipeline.abandon()
   timer.abandon()
   profile = initFrameProfile()

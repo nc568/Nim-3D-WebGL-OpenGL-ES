@@ -89,13 +89,18 @@ proc runPostProbe*(ctx: Context; caps: Capabilities; read: FrameReader) =
     doAssert p.beginFrame(64,64,neutral)
     runInstanceProbe(ctx,caps,read)
     p.endFrame()
-  p.dispose()
+  var alias = p
+  alias.dispose()
   p.dispose()
   rejected = false
   try: discard p.beginFrame(64,64)
   except ValueError: rejected = true
   doAssert rejected
   p = initPipeline(ctx,caps,maxTargetPixels=64*64)
+  rejected = false
+  try: discard alias.beginFrame(64,64)
+  except ValueError: rejected = true
+  doAssert rejected
   doAssert p.beginFrame(64,64)
   p.endFrame()
   if modern:
@@ -107,5 +112,9 @@ proc runPostProbe*(ctx: Context; caps: Capabilities; read: FrameReader) =
     p.endFrame()
     doAssert p.stats.targetRebuilds == 1
   p.dispose()
+  alias = p
+  p.abandon()
+  alias.cancelFrame()
+  alias.dispose()
   r.dispose()
   echo "Post neutral/scale/grading/lifecycle PASS: ",caps.api

@@ -6,7 +6,7 @@ else:
   import softgfx/backends/gles as backend
 export backend.Context
 
-type Renderer* = object
+type Renderer* = ref object
   context: Context
   program: backend.Program
   buffer, indices: backend.Buffer
@@ -32,6 +32,7 @@ proc initRenderer*(context: Context; caps: Capabilities; mesh: MeshData; owners:
     raise newException(ValueError,"Background shader does not support instances")
   if instanceCapacity < 0 or instanceCapacity > MaxInstances:
     raise newException(ValueError, "Invalid instance capacity")
+  new(result)
   result.context = context
   result.caps = caps
   result.owners = if owners.isNil: newOwnerMap(1,1) else: owners
@@ -70,17 +71,19 @@ proc countBytes(counter: var int; amount: int) {.inline.} =
 
 proc updateTerritory*(r: var Renderer; x,y,w,h: int; data: seq[uint8]) =
   ## Tight byte rows. CPU shadow is retained for context recreation.
-  if not r.alive: raise newException(ValueError, "Renderer is disposed")
+  if r.isNil or not r.alive: raise newException(ValueError, "Renderer is disposed")
   r.owners.checkDelta(x,y,w,h,data)
   backend.uploadDelta(r.context,r.territoryBinding,x,y,w,h,data)
   r.owners.applyDelta(x,y,w,h,data)
   countBytes(r.stats.deltaUploads,1)
   countBytes(r.stats.deltaBytes,data.len)
 
-proc instanceMode*(r: Renderer): InstanceMode = r.stream.mode
+proc instanceMode*(r: Renderer): InstanceMode =
+  if r.isNil or not r.alive: raise newException(ValueError,"Renderer is disposed")
+  r.stream.mode
 
 proc updateInstances*(r: var Renderer; items: openArray[Instance]) =
-  if not r.alive: raise newException(ValueError, "Renderer is disposed")
+  if r.isNil or not r.alive: raise newException(ValueError, "Renderer is disposed")
   if r.instanceCapacity == 0: raise newException(ValueError, "Renderer has no instance capacity")
   if items.len > 0 and r.count > high(int) div items.len:
     raise newException(ValueError, "Submitted vertex statistics exceed host integer range")
@@ -94,7 +97,7 @@ proc updateInstances*(r: var Renderer; items: openArray[Instance]) =
     countBytes(r.stats.instanceUploadBytes,items.len*InstanceBytes)
 
 proc frameReady(r: var Renderer; width,height: int; viewProjection: Mat4): bool =
-  if not r.alive: raise newException(ValueError, "Renderer is disposed")
+  if r.isNil or not r.alive: raise newException(ValueError, "Renderer is disposed")
   r.stats.drawCalls = 0
   r.stats.vertices = 0
   r.stats.instances = 0
@@ -107,7 +110,7 @@ proc frameReady(r: var Renderer; width,height: int; viewProjection: Mat4): bool 
 
 proc render*(r: var Renderer; width, height: int; viewProjection = identity(); clear = true) =
   ## clear=false composes another opaque batch into the current color/depth target.
-  if r.background: raise newException(ValueError,"Use renderBackground for a sky renderer")
+  if not r.isNil and r.background: raise newException(ValueError,"Use renderBackground for a sky renderer")
   if not r.frameReady(width,height,viewProjection): return
   backend.draw(r.context, r.program, r.buffer, r.count, width, height, r.matrixBinding,
     viewProjection, r.indices, r.indexed, r.territoryBinding, clear)
@@ -124,18 +127,24 @@ proc renderInstances*(r: var Renderer; width, height: int; viewProjection = iden
   r.stats.vertices = r.count*r.instanceCount
 
 proc dispose*(r: var Renderer) =
-  ## Explicit lifetime: call while the original context is current. Do not copy Renderer.
-  if r.alive:
+  ## Shared handle: all aliases observe disposal. Original context must be current.
+  if not r.isNil and r.alive:
+    r.alive = false # invalidate aliases BEFORE issuing driver calls
     backend.destroyInstanceStream(r.context,r.stream)
     r.instanceData.setLen(0)
     backend.destroyIndices(r.context,r.indices)
     backend.destroyTerritory(r.context,r.territoryBinding)
     backend.destroy(r.context, r.program, r.buffer)
-    r.alive = false
 
+
+proc abandon*(r: var Renderer) =
+  ## Context LOST only. No GL calls; all aliases become invalid.
+  if r.isNil: return
+  r.alive = false
+  r.instanceData.setLen(0)
 
 proc updateEffects*(r: var Renderer; settings: SceneEffects; force = false) =
-  if not r.alive: raise newException(ValueError,"Renderer is disposed")
+  if r.isNil or not r.alive: raise newException(ValueError,"Renderer is disposed")
   if r.background: raise newException(ValueError,"Background shader does not accept scene effects")
   settings.validate() # reject entire snapshot before mutating any uniform
   if not effectChanges(r.effects,settings,r.effectsDelta,force or r.effectsUncertain):
@@ -165,7 +174,7 @@ proc initSkyRenderer*(context: Context; caps: Capabilities; bottom,top: Vec3): R
 proc updateVisibleInstances*(r: var Renderer; items: openArray[Instance];
                              indices: openArray[int]; count: int) =
   ## Packs the index prefix directly; no temporary seq[Instance]/slice required.
-  if not r.alive: raise newException(ValueError,"Renderer is disposed")
+  if r.isNil or not r.alive: raise newException(ValueError,"Renderer is disposed")
   if r.instanceCapacity == 0: raise newException(ValueError,"Renderer has no instance capacity")
   if count > 0 and r.count > high(int) div count:
     raise newException(ValueError,"Submitted vertex statistics exceed host integer range")
@@ -194,7 +203,7 @@ proc finishConditionalUpdate(r: var Renderer; count: int; changed: bool): bool =
 
 proc updateInstancesIfChanged*(r: var Renderer; items: openArray[Instance]): bool {.discardable.} =
   ## Still O(N) validation/packing; skips GPU submission for identical float32 data.
-  if not r.alive: raise newException(ValueError,"Renderer is disposed")
+  if r.isNil or not r.alive: raise newException(ValueError,"Renderer is disposed")
   if r.instanceCapacity == 0: raise newException(ValueError,"Renderer has no instance capacity")
   if items.len > 0 and r.count > high(int) div items.len:
     raise newException(ValueError,"Submitted vertex statistics exceed host integer range")
@@ -203,7 +212,7 @@ proc updateInstancesIfChanged*(r: var Renderer; items: openArray[Instance]): boo
 
 proc updateVisibleInstancesIfChanged*(r: var Renderer; items: openArray[Instance];
                                      indices: openArray[int]; count: int): bool {.discardable.} =
-  if not r.alive: raise newException(ValueError,"Renderer is disposed")
+  if r.isNil or not r.alive: raise newException(ValueError,"Renderer is disposed")
   if r.instanceCapacity == 0: raise newException(ValueError,"Renderer has no instance capacity")
   if count > 0 and r.count > high(int) div count:
     raise newException(ValueError,"Submitted vertex statistics exceed host integer range")

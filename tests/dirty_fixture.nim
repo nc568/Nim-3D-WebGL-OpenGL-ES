@@ -7,6 +7,9 @@ when defined(js):
   proc buffers(gl: Context): int {.importjs: "#._dirty.b".}
   proc failUniform(gl: Context) {.importjs: "(#._dirty.failU=2)".}
   proc failBuffer(gl: Context) {.importjs: "(#._dirty.failB=1)".}
+  proc trackDeletes(gl: Context) {.importjs: """(function(g){g._deletes=0;const names=['deleteBuffer','deleteProgram','deleteTexture'];const old=names.map(n=>g[n]);g._restoreDeletes=()=>names.forEach((n,i)=>g[n]=old[i]);names.forEach((n,i)=>g[n]=function(...a){g._deletes++;return old[i].apply(g,a);});})(#)""".}
+  proc deletions(gl: Context): int {.importjs: "#._deletes".}
+  proc restoreDeletes(gl: Context) {.importjs: "#._restoreDeletes()".}
   proc untrack(gl: Context) {.importjs: "#._dirty.restore()".}
 
 
@@ -111,10 +114,35 @@ proc runDirtyProbe*(ctx: Context; caps: Capabilities; read: FrameReader) =
     doAssert not r.updateInstancesIfChanged(poses)
     r.updateEffects(SceneEffects())
     doAssert r.stats.instanceSkippedUpdates == high(int) and r.stats.effectSkippedUpdates == high(int)
-    r.dispose()
+    var alias = r
+    when defined(js): trackDeletes(ctx)
+    alias.dispose()
+    when defined(js):
+      let deleted = deletions(ctx)
+      doAssert deleted > 0
+    r.dispose() # not a second GL deletion
+    when defined(js):
+      doAssert deletions(ctx) == deleted
+      restoreDeletes(ctx)
+    var rejected = false
+    try: r.renderInstances(64,64)
+    except ValueError: rejected = true
+    doAssert rejected
+    rejected = false
+    try: alias.updateEffects(SceneEffects())
+    except ValueError: rejected = true
+    doAssert rejected
     r = initRenderer(ctx,caps,mesh,instanceCapacity=2,forceFallback=fallback)
     doAssert r.updateInstancesIfChanged(poses) # a new owner cannot reuse the old cache
     r.renderInstances(64,64)
     doAssert read() == image
+    # Replacing one alias must not revive the old resource.
+    rejected = false
+    try: alias.updateInstances(poses)
+    except ValueError: rejected = true
+    doAssert rejected
     r.dispose()
+    alias = r
+    r.abandon() # already disposed; no live GPU allocation leaked by this test
+    alias.dispose()
   echo "Dirty GPU skips / count transitions / effects delta / forced parity / recreation PASS: ",caps.api
