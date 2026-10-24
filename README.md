@@ -277,3 +277,12 @@ ARM64 **cross-link only**. Logs/screenshots are retained as artifacts; no PAT is
 needed in the workflow. Security, triggers, cache behavior and limitations:
 [CI guide](docs/ci.md). A local native equivalent is `./tools/ci_native.sh` after
 bootstrapping the toolchains.
+
+## Пропуск повторных uploads
+
+`updateInstancesIfChanged` / `updateVisibleInstancesIfChanged` сравнивают packed
+float32 snapshot и пропускают одинаковые submissions. Старые APIs остаются forced.
+`updateEffects` обновляет только изменившиеся uniform-группы (`force=true` для
+полной синхронизации). Demo использует эти пути и экспортирует счётчики skips/calls.
+Это O(N) comparison, не dirty-range upload или обещание hardware FPS:
+[контракт и проверка](docs/validation-dirty.md).

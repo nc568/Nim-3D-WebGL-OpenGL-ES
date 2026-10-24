@@ -3,7 +3,7 @@
 set -eu
 NIM=${NIM:-nim}
 mkdir -p build
-for suite in test_core test_math3d test_resources test_instances test_post test_timing test_autoscale test_environment test_culling test_motion; do
+for suite in test_core test_math3d test_resources test_instances test_post test_timing test_autoscale test_environment test_culling test_motion test_dirty; do
   "$NIM" c --nimcache:"build/cache-gcc-$suite" -r -o:"build/${suite}_gcc" "tests/$suite.nim"
   if [ -n "${CLANG:-}" ]; then
     "$NIM" c --cc:clang --clang.exe:"$CLANG" --clang.linkerexe:"$CLANG" \

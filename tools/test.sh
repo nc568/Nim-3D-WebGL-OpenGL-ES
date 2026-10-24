@@ -32,6 +32,9 @@ node build/test_culling.js
 "$NIM" c --nimcache:build/cache-motion -r -o:build/test_motion tests/test_motion.nim
 "$NIM" js -o:build/test_motion.js tests/test_motion.nim
 node build/test_motion.js
+"$NIM" c --nimcache:build/cache-dirty -r -o:build/test_dirty tests/test_dirty.nim
+"$NIM" js -o:build/test_dirty.js tests/test_dirty.nim
+node build/test_dirty.js
 "$NIM" js -o:build/test_webgl.js tests/test_webgl.nim
 node tools/check_js_hotpath.cjs build/test_webgl.js culling
 printf '<!doctype html><canvas id="scene" width="64" height="64"></canvas><p id="status">RUNNING</p><script src="test_webgl.js"></script>' > build/gpu-test.html

@@ -19,6 +19,7 @@ type
     drawCalls*, vertices*, bufferBytes*: int
     textureBytes*, deltaUploads*, deltaBytes*: int
     instances*, instanceUpdates*, instanceUploadBytes*: int
+    instanceSkippedUpdates*, effectUpdates*, effectUniformCalls*, effectSkippedUpdates*: int
 
 func baseline*(api: Api): Capabilities =
   let modern = api in {webgl2, gles3}

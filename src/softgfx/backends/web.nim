@@ -239,14 +239,28 @@ proc effectBinding*(gl: Context; p: Program): EffectBinding =
     result.rects[i] = gl.getUniformLocation(p,cstring("uBlobRects[" & $i & "]"))
     result.planes[i] = gl.getUniformLocation(p,cstring("uBlobPlanes[" & $i & "]"))
 
-proc updateEffects*(gl: Context; p: Program; b: EffectBinding; s: SceneEffects) =
+proc updateEffects*(gl: Context; p: Program; b: EffectBinding; s: SceneEffects;
+                    changes: EffectChanges): int =
   gl.useProgram(p)
-  gl.uniform4f(b.fog,(if s.fogEnabled: s.fogNear else: 0'f32),
-    (if s.fogEnabled: 1'f32/(s.fogFar-s.fogNear) else: 0'f32),float32(s.blobCount),0)
-  if s.fogEnabled:
-    gl.uniform4f(b.eye,s.eye[0],s.eye[1],s.eye[2],0)
-    gl.uniform4f(b.color,s.fogColor[0],s.fogColor[1],s.fogColor[2],0)
-  for i in 0..<s.blobCount:
-    let blob = s.blobs[i]
-    gl.uniform4f(b.rects[i],blob.center[0],blob.center[2],blob.radiusX,blob.radiusZ)
-    gl.uniform4f(b.planes[i],blob.center[1],blob.strength,cos(blob.yaw),sin(blob.yaw))
+  if changes.parameters:
+    gl.uniform4f(b.fog,(if s.fogEnabled: s.fogNear else: 0'f32),
+      (if s.fogEnabled: 1'f32/(s.fogFar-s.fogNear) else: 0'f32),float32(s.blobCount),0)
+    inc result
+  if changes.eye:
+    if s.fogEnabled: gl.uniform4f(b.eye,s.eye[0],s.eye[1],s.eye[2],0)
+    else: gl.uniform4f(b.eye,0,0,0,0)
+    inc result
+  if changes.color:
+    if s.fogEnabled: gl.uniform4f(b.color,s.fogColor[0],s.fogColor[1],s.fogColor[2],0)
+    else: gl.uniform4f(b.color,0,0,0,0)
+    inc result
+  for i in 0..<MaxBlobs:
+    if changes.blobs[i]:
+      if i < s.blobCount:
+        template blob: untyped = s.blobs[i]
+        gl.uniform4f(b.rects[i],blob.center[0],blob.center[2],blob.radiusX,blob.radiusZ)
+        gl.uniform4f(b.planes[i],blob.center[1],blob.strength,cos(blob.yaw),sin(blob.yaw))
+      else:
+        gl.uniform4f(b.rects[i],0,0,0,0)
+        gl.uniform4f(b.planes[i],0,0,0,0)
+      result += 2

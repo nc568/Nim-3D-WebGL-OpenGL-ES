@@ -150,3 +150,12 @@ RAF и подаёт rendered poses в culling, instance stream и blob shadows. 
 network jitter/authoritative synchronization пока отсутствуют. См. validation-motion.md.
 Новые helpers backend-neutral, не имеют clock IO или GL calls. Все renderer
 resource ownership/window/mobile/hardware acceptance ограничения сохраняются.
+
+## Уточнение после одиннадцатого среза
+
+Persistent float32 instance shadow позволяет optional skip одинаковых uploads;
+эффекты используют canonical cache и dirty uniform groups. Pending state после
+backend exception требует retry, новые renderer создают собственный cache.
+Forced APIs сохранены; ownership и host context-loss lifecycle не изменились.
+Это O(N) comparison, без spatial index/partial-range uploads. Подробности и
+измеренные GL calls: validation-dirty.md.

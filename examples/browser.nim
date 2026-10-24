@@ -37,7 +37,7 @@ resetMotionHistory()
 let owners = arenaOwners()
 var renderer = initRenderer(device.ctx, device.caps, asset, owners)
 var cars = initRenderer(device.ctx,device.caps,carAsset,instanceCapacity=3,forceFallback=fallback())
-cars.updateInstances(poses)
+cars.updateInstancesIfChanged(poses)
 showMode(cstring($cars.instanceMode))
 const SkyBottom = [0.42'f32,0.51,0.62]
 const SkyTop = [0.12'f32,0.24,0.42]
@@ -99,6 +99,12 @@ proc timingReport(): JsObject =
   result.drawCalls = renderer.stats.drawCalls+cars.stats.drawCalls+pipeline.stats.finalDrawCalls+(if skyEnabled: sky.stats.drawCalls else: 0)
   result.api = cstring($device.caps.api)
   result.scale = post.scale
+  result.instanceUploadBytes = cars.stats.instanceUploadBytes
+  result.instanceUpdates = cars.stats.instanceUpdates
+  result.instanceSkippedUpdates = cars.stats.instanceSkippedUpdates
+  result.effectUpdates = renderer.stats.effectUpdates+cars.stats.effectUpdates
+  result.effectUniformCalls = renderer.stats.effectUniformCalls+cars.stats.effectUniformCalls
+  result.effectSkippedUpdates = renderer.stats.effectSkippedUpdates+cars.stats.effectSkippedUpdates
   result.simulationStepSeconds = fixedClock.stepSeconds
   result.simulationTicks = simulationTicks
   result.renderAlpha = renderAlpha
@@ -162,7 +168,7 @@ proc drawFrame() =
         let matrix = camera.viewProjection(float32(w)/float32(h))
         if cullingEnabled:
           let count = frustum(matrix).collectVisible(carBounds,poses,visibleIndices)
-          cars.updateVisibleInstances(poses,visibleIndices,count)
+          cars.updateVisibleInstancesIfChanged(poses,visibleIndices,count)
         # Keep ALL caster poses below: an offscreen car can cast a visible shadow.
         atmosphere.fogEnabled = fogEnabled
         atmosphere.eye = camera.eye
@@ -212,7 +218,7 @@ onEvent(surface, "webglcontextrestored", proc(e: JsObject) =
   sky = initSkyRenderer(device.ctx,device.caps,SkyBottom,SkyTop)
   renderer = initRenderer(device.ctx, device.caps, asset, owners)
   cars = initRenderer(device.ctx,device.caps,carAsset,instanceCapacity=3,forceFallback=fallback())
-  cars.updateInstances(poses)
+  cars.updateInstancesIfChanged(poses)
   showMode(cstring($cars.instanceMode))
   lost = false
   drawFrame()
@@ -258,7 +264,7 @@ proc advance(seconds: float32) =
   carSnapshot(simulationTime,poses)
   resetMotionHistory()
   if not lost:
-    if not cullingEnabled: cars.updateInstances(poses)
+    if not cullingEnabled: cars.updateInstancesIfChanged(poses)
     drawFrame()
 onEvent(element("step-cars"),"click",proc(e: JsObject) = advance(0.25))
 onEvent(element("run-cars"),"click",proc(e: JsObject) =
@@ -287,7 +293,7 @@ proc advanceRendered(seconds: float64) =
     if span < 0: span += 2*PI.float32/0.6'f32
     renderedTime = (previousTime+span*float32(renderAlpha)) mod (2*PI.float32/0.6'f32)
   if not lost:
-    if not cullingEnabled: cars.updateInstances(poses)
+    if not cullingEnabled: cars.updateInstancesIfChanged(poses)
     drawFrame()
 proc publishAdvance(cb: proc(seconds: float64)) {.importjs: "(globalThis.softgfxAdvance = #)".}
 publishAdvance(advanceRendered) # example/test hook, not a graphics-library global
@@ -341,6 +347,6 @@ for id in ["env-sky","env-fog","env-shadows"]:
 
 onEvent(element("cull-cars"),"input",proc(e: JsObject) =
   cullingEnabled = element("cull-cars").checked.to(bool)
-  if not lost and not cullingEnabled: cars.updateInstances(poses)
+  if not lost and not cullingEnabled: cars.updateInstancesIfChanged(poses)
   resetMeasurements()
   drawFrame())

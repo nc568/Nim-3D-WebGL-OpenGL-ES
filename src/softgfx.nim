@@ -14,6 +14,9 @@ type Renderer* = object
   owners: OwnerMap
   indexed: bool
   effectBinding: backend.EffectBinding
+  effects: SceneEffects
+  effectsDelta: EffectChanges
+  effectsUncertain, instancesPending: bool
   matrixBinding: backend.MatrixBinding
   stream: backend.InstanceStream
   instanceData: seq[float32]
@@ -82,7 +85,9 @@ proc updateInstances*(r: var Renderer; items: openArray[Instance]) =
   if items.len > 0 and r.count > high(int) div items.len:
     raise newException(ValueError, "Submitted vertex statistics exceed host integer range")
   packInstances(items,r.instanceData)
+  r.instancesPending = true
   backend.uploadInstances(r.context,r.stream,r.instanceData,items.len)
+  r.instancesPending = false
   r.instanceCount = items.len
   countBytes(r.stats.instanceUpdates,1)
   if r.stream.mode != fallbackDraws:
@@ -129,11 +134,19 @@ proc dispose*(r: var Renderer) =
     r.alive = false
 
 
-proc updateEffects*(r: var Renderer; settings: SceneEffects) =
+proc updateEffects*(r: var Renderer; settings: SceneEffects; force = false) =
   if not r.alive: raise newException(ValueError,"Renderer is disposed")
   if r.background: raise newException(ValueError,"Background shader does not accept scene effects")
   settings.validate() # reject entire snapshot before mutating any uniform
-  backend.updateEffects(r.context,r.program,r.effectBinding,settings)
+  if not effectChanges(r.effects,settings,r.effectsDelta,force or r.effectsUncertain):
+    countBytes(r.stats.effectSkippedUpdates,1)
+    return
+  r.effectsUncertain = true # exceptions during upload require a complete retry
+  let calls = backend.updateEffects(r.context,r.program,r.effectBinding,settings,r.effectsDelta)
+  retainEffects(settings,r.effects)
+  r.effectsUncertain = false
+  countBytes(r.stats.effectUpdates,1)
+  countBytes(r.stats.effectUniformCalls,calls)
 
 proc renderBackground*(r: var Renderer; width,height: int) =
   ## Clip-space opaque background. Caller clears once first; draw BEFORE scene.
@@ -157,8 +170,42 @@ proc updateVisibleInstances*(r: var Renderer; items: openArray[Instance];
   if count > 0 and r.count > high(int) div count:
     raise newException(ValueError,"Submitted vertex statistics exceed host integer range")
   packVisible(items,indices,count,r.instanceData)
+  r.instancesPending = true
   backend.uploadInstances(r.context,r.stream,r.instanceData,count)
+  r.instancesPending = false
   r.instanceCount = count
   countBytes(r.stats.instanceUpdates,1)
   if r.stream.mode != fallbackDraws:
     countBytes(r.stats.instanceUploadBytes,count*InstanceBytes)
+
+
+proc finishConditionalUpdate(r: var Renderer; count: int; changed: bool): bool =
+  if not changed and not r.instancesPending and count == r.instanceCount:
+    countBytes(r.stats.instanceSkippedUpdates,1)
+    return false
+  r.instancesPending = true
+  backend.uploadInstances(r.context,r.stream,r.instanceData,count)
+  r.instancesPending = false
+  r.instanceCount = count
+  countBytes(r.stats.instanceUpdates,1)
+  if r.stream.mode != fallbackDraws:
+    countBytes(r.stats.instanceUploadBytes,count*InstanceBytes)
+  true
+
+proc updateInstancesIfChanged*(r: var Renderer; items: openArray[Instance]): bool {.discardable.} =
+  ## Still O(N) validation/packing; skips GPU submission for identical float32 data.
+  if not r.alive: raise newException(ValueError,"Renderer is disposed")
+  if r.instanceCapacity == 0: raise newException(ValueError,"Renderer has no instance capacity")
+  if items.len > 0 and r.count > high(int) div items.len:
+    raise newException(ValueError,"Submitted vertex statistics exceed host integer range")
+  let changed = packInstancesChanged(items,r.instanceData)
+  r.finishConditionalUpdate(items.len,changed)
+
+proc updateVisibleInstancesIfChanged*(r: var Renderer; items: openArray[Instance];
+                                     indices: openArray[int]; count: int): bool {.discardable.} =
+  if not r.alive: raise newException(ValueError,"Renderer is disposed")
+  if r.instanceCapacity == 0: raise newException(ValueError,"Renderer has no instance capacity")
+  if count > 0 and r.count > high(int) div count:
+    raise newException(ValueError,"Submitted vertex statistics exceed host integer range")
+  let changed = packVisibleChanged(items,indices,count,r.instanceData)
+  r.finishConditionalUpdate(count,changed)

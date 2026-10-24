@@ -34,6 +34,12 @@ proc validate*(items: openArray[Instance]; capacity: int) =
     for value in items[i].tint:
       if value < 0 or value > 1: raise newException(ValueError, "Tint must be linear RGB in [0,1]")
 
+when defined(js):
+  proc gpuFloat(value: float32): float32 {.importjs: "Math.fround(#)".}
+else:
+  func gpuFloat(value: float32): float32 {.inline.} = value
+
+
 proc packInstances*(items: openArray[Instance]; data: var seq[float32]) =
   ## Validate the entire input before changing the previous snapshot.
   ## Indexed access avoids Nim JS temporary Instance objects/typed-array copies.
@@ -41,11 +47,11 @@ proc packInstances*(items: openArray[Instance]; data: var seq[float32]) =
   for i in 0..<items.len:
     let offset = i*InstanceFloats
     for axis in 0..2:
-      data[offset+axis] = items[i].position[axis]
-      data[offset+6+axis] = items[i].tint[axis]
-    data[offset+3] = cos(items[i].yaw)
-    data[offset+4] = sin(items[i].yaw)
-    data[offset+5] = items[i].scale
+      data[offset+axis] = gpuFloat(items[i].position[axis])
+      data[offset+6+axis] = gpuFloat(items[i].tint[axis])
+    data[offset+3] = gpuFloat(cos(items[i].yaw))
+    data[offset+4] = gpuFloat(sin(items[i].yaw))
+    data[offset+5] = gpuFloat(items[i].scale)
 
 proc packVisible*(items: openArray[Instance]; indices: openArray[int]; count: int;
                   data: var seq[float32]) =
@@ -62,8 +68,44 @@ proc packVisible*(items: openArray[Instance]; indices: openArray[int]; count: in
     let source = indices[i]
     let offset = i*InstanceFloats
     for axis in 0..2:
-      data[offset+axis] = items[source].position[axis]
-      data[offset+6+axis] = items[source].tint[axis]
-    data[offset+3] = cos(items[source].yaw)
-    data[offset+4] = sin(items[source].yaw)
-    data[offset+5] = items[source].scale
+      data[offset+axis] = gpuFloat(items[source].position[axis])
+      data[offset+6+axis] = gpuFloat(items[source].tint[axis])
+    data[offset+3] = gpuFloat(cos(items[source].yaw))
+    data[offset+4] = gpuFloat(sin(items[source].yaw))
+    data[offset+5] = gpuFloat(items[source].scale)
+
+
+proc storeChanged(data: var seq[float32]; index: int; value: float32): bool {.inline.} =
+  # Compare the GPU representation, NOT a JS double against a Float32Array value.
+  let rounded = gpuFloat(value)
+  if data[index] != rounded:
+    data[index] = rounded
+    return true
+
+proc packRecordChanged(items: openArray[Instance]; source, offset: int;
+                       data: var seq[float32]): bool =
+  for axis in 0..2:
+    if storeChanged(data,offset+axis,items[source].position[axis]): result = true
+    if storeChanged(data,offset+6+axis,items[source].tint[axis]): result = true
+  if storeChanged(data,offset+3,cos(items[source].yaw)): result = true
+  if storeChanged(data,offset+4,sin(items[source].yaw)): result = true
+  if storeChanged(data,offset+5,items[source].scale): result = true
+
+proc packInstancesChanged*(items: openArray[Instance]; data: var seq[float32]): bool =
+  ## Persistent packed CPU shadow; validation is atomic, output writes only on diff.
+  items.validate(data.len div InstanceFloats)
+  for i in 0..<items.len:
+    if packRecordChanged(items,i,i*InstanceFloats,data): result = true
+
+proc packVisibleChanged*(items: openArray[Instance]; indices: openArray[int]; count: int;
+                         data: var seq[float32]): bool =
+  items.validate(MaxInstances)
+  if count < 0 or count > indices.len or count > data.len div InstanceFloats:
+    raise newException(ValueError,"Visible count exceeds capacity")
+  var previous = -1
+  for i in 0..<count:
+    if indices[i] <= previous or indices[i] >= items.len:
+      raise newException(ValueError,"Visible indices must be increasing and in range")
+    previous = indices[i]
+  for i in 0..<count:
+    if packRecordChanged(items,indices[i],i*InstanceFloats,data): result = true
