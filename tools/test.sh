@@ -20,6 +20,7 @@ node build/test_post.js
 "$NIM" c --nimcache:build/cache-timing -r -o:build/test_timing tests/test_timing.nim
 "$NIM" js -o:build/test_timing.js tests/test_timing.nim
 node build/test_timing.js
+node tools/check_js_hotpath.cjs build/test_timing.js scopes
 "$NIM" c --nimcache:build/cache-autoscale -r -o:build/test_autoscale tests/test_autoscale.nim
 "$NIM" js -o:build/test_autoscale.js tests/test_autoscale.nim
 node build/test_autoscale.js

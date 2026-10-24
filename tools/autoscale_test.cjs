@@ -10,7 +10,7 @@ const puppeteer=require('puppeteer-core');
  const browser=await puppeteer.launch({executablePath:await chromium.executablePath(),args:chromium.args,headless:true});
  try {
   const page=await browser.newPage();const errors=[];
-  page.on('pageerror',e=>errors.push(String(e)));
+  page.on('pageerror',e=>{errors.push(String(e));console.error(e.stack||String(e));});
   await page.goto('http://127.0.0.1:8080/');
   await page.waitForFunction(()=>typeof softgfxTiming==='function');
   await page.evaluate(()=>{
@@ -41,6 +41,7 @@ const puppeteer=require('puppeteer-core');
   await page.evaluate(()=>{
    const e=document.getElementById('post-enabled');e.checked=true;e.dispatchEvent(new Event('input'));
    globalThis.loss=testGl.getExtension('WEBGL_lose_context');loss.loseContext();
+   softgfxRender(); // observable loss before event delivery must not kill RAF
   });
   await page.waitForFunction(()=>document.getElementById('status').textContent==='lost');
   report=await page.evaluate(()=>softgfxTiming());

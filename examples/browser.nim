@@ -135,7 +135,7 @@ proc refreshTiming() =
   timingText(cstring(cpu & " · " & gpu & " · frames: " & $report.frames))
 var angle = 0.6
 var distance = 15.0
-proc drawFrame() =
+proc drawFrameImpl() =
   if not lost:
     let w = surface.width.to(int)
     let h = surface.height.to(int)
@@ -202,6 +202,14 @@ proc drawFrame() =
         if frame mod 30 == 0: refreshTiming()
       showStats(renderer.stats.drawCalls+cars.stats.drawCalls+pipeline.stats.finalDrawCalls+(if skyEnabled: sky.stats.drawCalls else: 0))
       showPost(pipeline.stats.renderWidth,pipeline.stats.renderHeight,pipeline.stats.finalDrawCalls)
+proc drawFrame() =
+  # Loss can be observable before webglcontextlost is delivered. Do not let a
+  # scope rejection in that interval terminate the RAF chain. Unexpected errors
+  # on a live context still propagate; this is not blind driver-error recovery.
+  if lost or device.ctx.isContextLost().to(bool): return
+  try: drawFrameImpl()
+  except:
+    if not device.ctx.isContextLost().to(bool): raise
 publish(drawFrame)
 # Lifecycle diagnostic for the browser regression harness; no per-frame work.
 var retiredRenderer: Renderer
