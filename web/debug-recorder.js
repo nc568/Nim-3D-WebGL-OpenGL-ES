@@ -3,7 +3,7 @@
   'use strict';
   if (!new URLSearchParams(location.search).has('debug')) return;
   const capacity = 256, ring = new Array(capacity);
-  let total = 0, frames = 0, stopped = false;
+  let total = 0, frames = 0, stopped = false, graphics = null;
   const removers = [];
   // Intentionally omit location, stack URLs, arbitrary objects and user payloads.
   const text = value => typeof value === 'string' ? value.slice(0, 512) : typeof value;
@@ -24,6 +24,16 @@
   }
   listen(document, 'visibilitychange', () => record('visibility', document.visibilityState));
   const api = {
+    attach(gl, apiName) {
+      if (stopped) return;
+      // One debug-only capability capture, no unmasked renderer/device extension.
+      graphics = {api: text(apiName), version: text(gl.getParameter(gl.VERSION)),
+        shadingLanguage: text(gl.getParameter(gl.SHADING_LANGUAGE_VERSION)),
+        maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
+        maxVertexAttributes: gl.getParameter(gl.MAX_VERTEX_ATTRIBS),
+        extensions: (gl.getSupportedExtensions() || []).slice(0,128).map(text)};
+      record('capabilities', apiName);
+    },
     mark(message) { record('marker', message); },
     // Called after submission. Sample only every 60 frames, never read GL state.
     frame(draws, instances, uploadBytes, skipped) {
@@ -35,7 +45,7 @@
       for (let i = Math.max(0, total - capacity); i < total; i++) events.push({...ring[i % capacity]});
       return {schemaVersion: 1, scope: 'host diagnostics; not GPU timing',
         capacity, total, overwritten: Math.max(0,total-capacity), frames,
-        userAgent: navigator.userAgent, events};
+        userAgent: navigator.userAgent, graphics: graphics && {...graphics, extensions:[...graphics.extensions]}, events};
     },
     download() {
       const url = URL.createObjectURL(new Blob([JSON.stringify(api.snapshot(), null, 2)], {type:'application/json'}));

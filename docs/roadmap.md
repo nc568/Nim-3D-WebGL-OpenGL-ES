@@ -1,5 +1,12 @@
 # Состояние и оставшиеся этапы
 
+## Приоритет пользователя
+
+WebGL — основной target, OpenGL ES — второй; остальное менее важно.
+Физические устройства позже. Сейчас оптимизируем графику игры и diagnostics,
+расширяем browser matrix (Chromium, Firefox, WebKit/macOS ARM). Vulkan/Metal
+не должны отнимать время у этих задач. См. validation-web-debug.md.
+
 ## Реализовано (экспериментальное middleware)
 
 Pure JS без WASM, WebGL1/2 и native GLES2/3; GCC/LLVM/cproc-QBE matrix.

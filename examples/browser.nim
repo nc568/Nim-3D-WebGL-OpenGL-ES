@@ -9,6 +9,8 @@ proc publish(callback: proc()) {.importjs: "(globalThis.softgfxRender = #)".}
 proc onEvent(target: JsObject; name: cstring; cb: proc(e: JsObject)) {.importjs: "#.addEventListener(#, #)".}
 let surface = canvas()
 let device = acquire(surface, legacy())
+proc debugAttach(gl: JsObject; api: cstring) {.importjs: "(globalThis.softgfxDebug && globalThis.softgfxDebug.attach(#,#))".}
+debugAttach(device.ctx,cstring($device.caps.api))
 proc fallback(): bool {.importjs: "(new URLSearchParams(location.search).has('fallback'))".}
 proc showMode(mode: cstring) {.importjs: "(document.getElementById('batch-mode').textContent = #)".}
 proc debugFrame(draws, instances, uploadBytes, skipped: int) {.importjs: "(globalThis.softgfxDebug && globalThis.softgfxDebug.frame(#,#,#,#))".}

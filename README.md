@@ -357,3 +357,10 @@ dense views; полный clear marks больше не нужен. Workloads 64
 256 на GPU проверяют culling/packing/pixel parity и экспортируют отдельные JSON
 reports в CI. Числа debug/software CI — не hardware FPS и не завершённый E1–E7:
 [контракт и методика](docs/validation-workloads.md).
+
+## Web-first debugging и browser matrix
+
+Приоритет — WebGL, затем OpenGL ES. `/?debug` включает ограниченный flight recorder
+и скачивание JSON без отправки на сервер. Firefox и Playwright WebKit/macOS ARM
+получают отдельные CI jobs; WebKit не подменяет проверку настоящего Safari/iOS.
+[Методика, ограничения и debug API](docs/validation-web-debug.md).

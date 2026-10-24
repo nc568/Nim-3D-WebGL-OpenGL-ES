@@ -14,7 +14,7 @@ const report = {schemaVersion:1, engine, platform:process.platform, arch:process
   for (const legacy of [false,true]) {
    const page = await browser.newPage();
    const errors=[], rows=[];
-   page.on('pageerror',e=>errors.push(String(e)));
+   page.on('pageerror',e=>{errors.push(String(e)); report.errors.push(String(e)); console.error(String(e));});
    page.on('console',msg=>{
     console.log(msg.text());
     if(msg.text().startsWith('GPU_WORKLOAD ')) rows.push(JSON.parse(msg.text().slice(13)));
@@ -30,7 +30,7 @@ const report = {schemaVersion:1, engine, platform:process.platform, arch:process
   }
   for (const query of ['debug','debug&webgl1','debug&fallback','debug&webgl1&fallback']) {
    const page=await browser.newPage(); const errors=[];
-   page.on('pageerror',e=>errors.push(String(e)));
+   page.on('pageerror',e=>{errors.push(String(e)); report.errors.push(String(e)); console.error(String(e));});
    try {
     await page.goto('http://127.0.0.1:8080/?'+query);
     await page.waitForFunction(()=>typeof softgfxRender==='function');
@@ -47,6 +47,7 @@ const report = {schemaVersion:1, engine, platform:process.platform, arch:process
      }
      for(let i=0;i<300;i++) softgfxDebug.mark('bounded-'+i);
      const snapshot=softgfxDebug.snapshot();
+     if(!snapshot.graphics || !snapshot.graphics.maxTextureSize) throw Error("Missing debug capabilities");
      if(snapshot.events.length!==256 || snapshot.overwritten<44) throw Error('Unbounded recorder');
      const first=snapshot.events[0].message; snapshot.events[0].message='mutated';
      if(softgfxDebug.snapshot().events[0].message!==first) throw Error('Mutable recorder export');
@@ -65,4 +66,4 @@ const report = {schemaVersion:1, engine, platform:process.platform, arch:process
   fs.writeFileSync(`build/cross-${engine}.json`,JSON.stringify(report,null,2));
   if(browser) await browser.close();
  }
-})().catch(e=>{console.error(e); process.exitCode=1;});
+})().catch(e=>{console.error(e); const detail=(report.errors.join('\n')||String(e)).slice(-7000).replaceAll('%','%25').replaceAll('\r','%0D').replaceAll('\n','%0A'); console.log('::error title=Cross-browser failure::'+detail); process.exitCode=1;});
