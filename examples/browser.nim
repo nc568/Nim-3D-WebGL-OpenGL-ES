@@ -11,6 +11,7 @@ let surface = canvas()
 let device = acquire(surface, legacy())
 proc fallback(): bool {.importjs: "(new URLSearchParams(location.search).has('fallback'))".}
 proc showMode(mode: cstring) {.importjs: "(document.getElementById('batch-mode').textContent = #)".}
+proc debugFrame(draws, instances, uploadBytes, skipped: int) {.importjs: "(globalThis.softgfxDebug && globalThis.softgfxDebug.frame(#,#,#,#))".}
 proc showStats(draws: int) {.importjs: "(document.getElementById('batch-stats').textContent = # + ' draw calls / кадр')".}
 let asset = arenaMesh(device.caps.api == webgl1, includeCars=false)
 let carAsset = carMesh(device.caps.api == webgl1)
@@ -201,6 +202,7 @@ proc drawFrameImpl() =
         profile.recordCpu(frame,clockMs()-started)
         if frame mod 30 == 0: refreshTiming()
       showStats(renderer.stats.drawCalls+cars.stats.drawCalls+pipeline.stats.finalDrawCalls+(if skyEnabled: sky.stats.drawCalls else: 0))
+      debugFrame(renderer.stats.drawCalls+cars.stats.drawCalls+pipeline.stats.finalDrawCalls+(if skyEnabled: sky.stats.drawCalls else: 0),cars.stats.instances,cars.stats.instanceUploadBytes,cars.stats.instanceSkippedUpdates)
       showPost(pipeline.stats.renderWidth,pipeline.stats.renderHeight,pipeline.stats.finalDrawCalls)
 proc drawFrame() =
   # Loss can be observable before webglcontextlost is delivered. Do not let a

@@ -9,6 +9,7 @@ on:
 # No PAT or repository secrets are needed; no pull_request_target execution.
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: graphics-${{ github.workflow }}-${{ github.ref }}
@@ -46,6 +47,14 @@ jobs:
           export NIM="$PWD/build/toolchains/Nim/bin/nim"
           export FOSSIL_SRC="$PWD/build/toolchains/fossil/src"
           ./tools/test.sh 2>&1 | tee build/ci-js.log
+      - name: Cross-browser application bundle
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: web-test-bundle
+          retention-days: 7
+          path: |
+            build/*.js
+            build/*.html
       - name: Browser GPU, lifecycle, UI, timing and autoscale
         shell: bash
         run: |
@@ -141,3 +150,59 @@ jobs:
             build/ci-*.log
             build/native-report.json
             build/workload-native.json
+
+  cross-browser:
+    name: WebGL / ${{ matrix.engine }} / ${{ matrix.os }}
+    needs: browser
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - engine: firefox
+            os: ubuntu-24.04
+          - engine: webkit
+            os: macos-15
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+      - name: Download identical pure-JS build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download ${{ github.run_id }} --name web-test-bundle --dir build
+      - name: Install pinned browser engine
+        run: |
+          npm ci
+          npx playwright install --with-deps ${{ matrix.engine }}
+      - name: Pixel oracles, workloads, resize fuzz and diagnostics
+        shell: bash
+        env:
+          BROWSER_ENGINE: ${{ matrix.engine }}
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8080 --bind 0.0.0.0 --directory build >build/cross-server.log 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          node tools/wait_http.cjs http://127.0.0.1:8080/gpu-test.html
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            xvfb-run -a node tools/cross_browser_test.cjs 2>&1 | tee build/cross-browser.log
+          else
+            node tools/cross_browser_test.cjs 2>&1 | tee build/cross-browser.log
+          fi
+      - name: Cross-browser evidence (including failures)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: web-${{ matrix.engine }}-${{ runner.arch }}
+          retention-days: 14
+          path: |
+            build/cross-*.json
+            build/cross-*.log
+            build/debug-*.json
+            build/*.png
