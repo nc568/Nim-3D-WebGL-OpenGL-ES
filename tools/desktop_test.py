@@ -117,6 +117,13 @@ def exercise(executable, api, full):
                 command('xdotool', 'windowactivate', '--sync', window)
                 app.wait(lambda s: s['paused'] == 0 and s['focused'] == 1, after=time.monotonic())
             assert sum(line.startswith('RECREATE PASS:') for line in app.lines) == 2
+            command('xdotool', 'key', '--clearmodifiers', 'l') # test-mode loss, not a hardware reset
+            app.wait(lambda s: s['recreations'] == 3 and s['injected'] == 1, after=time.monotonic())
+            window = command('xdotool', 'search', '--sync', '--all', '--pid', str(app.process.pid),
+                             '--name', 'Nim GLES').splitlines()[0]
+            command('xdotool', 'windowactivate', '--sync', window)
+            app.wait(lambda s: s['paused'] == 0 and s['focused'] == 1, after=time.monotonic())
+            assert any('reason=injected-loss' in line for line in app.lines)
             command('xdotool', 'key', '--clearmodifiers', 'alt+F4') # Openbox WM_DELETE_WINDOW
         else:
             command('xdotool', 'key', '--clearmodifiers', 'Escape')
@@ -136,6 +143,6 @@ try:
         time.sleep(0.05)
     exercise(sys.argv[1], sys.argv[2], True)
     exercise(sys.argv[1], sys.argv[2], False)
-    print('DESKTOP INPUT PASS: keyboard, unfocused freeze, minimize/restore, resize, recreation pixel parity, WM close, Escape', flush=True)
+    print('DESKTOP INPUT PASS: keyboard, unfocused freeze, minimize/restore, resize, recreation/loss-injection pixel parity, WM close, Escape', flush=True)
 finally:
     stop(wm)

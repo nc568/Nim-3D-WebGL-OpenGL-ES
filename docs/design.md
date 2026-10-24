@@ -216,3 +216,11 @@ Native demo отделяет retained CPU state от пересоздаваем�
 R инициирует planned window/context recreation с новым scope guard и повторным
 resolver lookup. Hardware-loss detection/abandon path не добавлен. См.
 validation-native-recreation.md.
+
+## Пакет 20: native health/recovery/reporting
+
+Добавлены latched reset monitor, advertised GLES reset-status adapter, optional
+strict robust context, bounded abandon/rebuild path и native timing/capability JSON.
+Normal, robust, injected-loss и reset-storm window scenarios включены в matrix.
+Аппаратная надёжность reset path не выводится из software injection. См.
+validation-native-recovery.md.

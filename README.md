@@ -339,3 +339,11 @@ poses, owner edits, camera и post settings сохраняются. Smoke/deskto
 сравнивают полный framebuffer до/после и проверяют старые handles.
 Это planned recreation, не driver-reset recovery:
 [контракт и validation](docs/validation-native-recreation.md).
+
+## Native reset recovery и profiling
+
+`--robust` требует reset-notifying GLES context; `--profile` печатает JSON diagnostics
+и rolling CPU submit/GPU/swap timing без блокирующих GPU reads. Reset detection
+использует advertised KHR/EXT robustness (либо GLES3.2 core), recovery — abandon и
+новый context с budget 3/session. Test-only L и --reset-storm проверяют simulated
+loss, а не аппаратный reset. [Пакет recovery/reporting](docs/validation-native-recovery.md).

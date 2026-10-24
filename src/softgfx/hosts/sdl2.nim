@@ -36,7 +36,7 @@ type
     window, context: pointer
     alive: bool
   WindowInput* = object
-    quit*, recreate*: bool
+    quit*, recreate*, testLoss*: bool
     orbit*, zoom*: int
 
 proc failure(action: string): ref IOError =
@@ -52,13 +52,13 @@ proc close*(host: SdlWindow) =
   SDL_GL_DeleteContext(host.context)
   SDL_DestroyWindow(host.window)
   SDL_QuitSubSystem(0x20)
-proc openWindow*(version = 3; width = 800; height = 600): SdlWindow =
+proc openWindow*(version = 3; width = 800; height = 600; robust = false): SdlWindow =
   if version notin [2,3] or width < 1 or height < 1 or width > 8192 or height > 8192:
     raise newException(ValueError,"Invalid GLES version/window dimensions")
   if SDL_InitSubSystem(0x20) != 0: raise failure("SDL video init")
   new(result)
   try:
-    for setting in [(21,4),(17,version),(18,0),(5,1),(6,24),(0,8),(1,8),(2,8)]:
+    for setting in [(20,(if robust: 4 else: 0)),(25,(if robust: 1 else: 0)),(21,4),(17,version),(18,0),(5,1),(6,24),(0,8),(1,8),(2,8)]:
       if SDL_GL_SetAttribute(cint(setting[0]),cint(setting[1])) != 0:
         raise failure("SDL GLES attribute")
     result.window = SDL_CreateWindow("Nim GLES - arrows orbit, W/S zoom, R recreate, Esc quit",
@@ -72,6 +72,11 @@ proc openWindow*(version = 3; width = 800; height = 600): SdlWindow =
     if SDL_GL_GetAttribute(21,addr profile) != 0 or SDL_GL_GetAttribute(17,addr major) != 0 or
         profile != 4 or major < cint(version):
       raise newException(IOError,"SDL did not provide the requested GLES profile")
+    if robust:
+      var flags, notification: cint
+      if SDL_GL_GetAttribute(20,addr flags) != 0 or SDL_GL_GetAttribute(25,addr notification) != 0 or
+          (flags and 4) == 0 or notification != 1:
+        raise newException(IOError,"Requested robust/reset-notifying context was not provided")
     discard SDL_GL_SetSwapInterval(1) # driver may not support vsync
   except:
     if result.context != nil: SDL_GL_DeleteContext(result.context)
@@ -125,7 +130,12 @@ proc poll*(host: SdlWindow): WindowInput =
     if kind == 0x300 and cast[ptr UncheckedArray[int32]](addr event[0])[5] == 114 and
         cast[ptr UncheckedArray[uint8]](addr event[0])[13] == 0:
       result.recreate = true # R keydown; ignore autorepeat
-  if not host.focused(): result.recreate = false
+    if kind == 0x300 and cast[ptr UncheckedArray[int32]](addr event[0])[5] == 108 and
+        cast[ptr UncheckedArray[uint8]](addr event[0])[13] == 0:
+      result.testLoss = true # L is consumed ONLY by the demo's test modes
+  if not host.focused():
+    result.recreate = false
+    result.testLoss = false
   var count: cint
   let keys = SDL_GetKeyboardState(addr count)
   if host.focused() and keys != nil and count > 80:

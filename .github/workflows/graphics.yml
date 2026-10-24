@@ -130,4 +130,6 @@ jobs:
         with:
           name: native-evidence
           retention-days: 14
-          path: build/ci-*.log
+          path: |
+            build/ci-*.log
+            build/native-report.json

@@ -43,6 +43,9 @@ node tools/check_js_hotpath.cjs build/test_identity.js identity
 "$NIM" c --nimcache:build/cache-grid -r -o:build/test_grid tests/test_grid.nim
 "$NIM" js -o:build/test_grid.js tests/test_grid.nim
 node build/test_grid.js
+"$NIM" c --nimcache:build/cache-recovery -r -o:build/test_recovery tests/test_recovery.nim
+"$NIM" js -o:build/test_recovery.js tests/test_recovery.nim
+node build/test_recovery.js
 "$NIM" js -o:build/test_webgl.js tests/test_webgl.nim
 node tools/check_js_hotpath.cjs build/test_webgl.js culling
 printf '<!doctype html><canvas id="scene" width="64" height="64"></canvas><p id="status">RUNNING</p><script src="test_webgl.js"></script>' > build/gpu-test.html
