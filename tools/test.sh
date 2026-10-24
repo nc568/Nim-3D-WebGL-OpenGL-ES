@@ -69,3 +69,6 @@ fi
 node tools/check_js_hotpath.cjs build/test_webgl.js ranges
 
 node tests/debug_recorder.cjs
+
+"$NIM" js -d:release -o:build/bench_release.js tests/bench_release.nim
+printf '<!doctype html><meta charset="utf-8"><title>CPU release workloads</title><script src="bench_release.js"></script>' > build/benchmark.html

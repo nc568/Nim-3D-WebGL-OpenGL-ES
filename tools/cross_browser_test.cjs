@@ -38,6 +38,7 @@ const report = {schemaVersion:1, engine, platform:process.platform, arch:process
      const canvas=document.querySelector('canvas');
      const gl=canvas.getContext(new URLSearchParams(location.search).has('webgl1')?'webgl':'webgl2');
      if(!gl) throw Error('Expected WebGL context unavailable');
+     softgfxDebug.setBudgets({drawCalls:0,uploadBytes:0});
      let seed=568;
      for(let i=0;i<60;i++) {
       seed=(Math.imul(seed,1664525)+1013904223)>>>0;
@@ -45,6 +46,8 @@ const report = {schemaVersion:1, engine, platform:process.platform, arch:process
       softgfxRender();
       if(gl.getError()) throw Error('GL error during resize fuzz');
      }
+     if(softgfxDebug.snapshot().budgetStatus.breachFrames!==60 || softgfxDebug.snapshot().budgetStatus.episodes!==1) throw Error('Budget episode tracking failed');
+     softgfxDebug.setBudgets(null);
      for(let i=0;i<300;i++) softgfxDebug.mark('bounded-'+i);
      const snapshot=softgfxDebug.snapshot();
      if(!snapshot.graphics || !snapshot.graphics.maxTextureSize) throw Error("Missing debug capabilities");
@@ -60,6 +63,7 @@ const report = {schemaVersion:1, engine, platform:process.platform, arch:process
     report.cases.push({name:query,passed:true});
    } finally { await page.close(); }
   }
+  await require('./release_benchmark.cjs')(browser,engine);
   report.passed=true;
  } catch(e) {report.errors.push(e.stack||String(e)); throw e;}
  finally {

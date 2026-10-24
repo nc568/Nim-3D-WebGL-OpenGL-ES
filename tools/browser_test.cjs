@@ -18,6 +18,7 @@ const puppeteer = require('puppeteer-core');
   await page.close();
  }
  if(process.env.GPU_ONLY==='1') return;
+ await require('./release_benchmark.cjs')(browser,'chromium');
  for (const suffix of (process.env.TEST_UI==='1' ? ['', '?webgl1', '?fallback', '?webgl1&fallback', 'ui.html'] : ['', '?webgl1', '?fallback', '?webgl1&fallback'])) {
   const page = await browser.newPage(); const errors=[];
   page.on('pageerror', e=>errors.push(String(e)));

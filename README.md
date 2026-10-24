@@ -364,3 +364,8 @@ reports в CI. Числа debug/software CI — не hardware FPS и не зав
 и скачивание JSON без отправки на сервер. Firefox и Playwright WebKit/macOS ARM
 получают отдельные CI jobs; WebKit не подменяет проверку настоящего Safari/iOS.
 [Методика, ограничения и debug API](docs/validation-web-debug.md).
+
+Release CPU workloads теперь прогоняются во всех трёх browser engines с warmup,
+median/p95 и raw samples. В `?debug` доступен `softgfxDebug.setBudgets(...)` для
+проверки draw-call/instance-upload budgets без автоматического изменения качества.
+[Контракт и ограничения](docs/validation-release-budgets.md).

@@ -40,3 +40,29 @@ d.stop();d.mark('after stop');d.frame(1,1,1,1);
 assert.equal(window.callbacks.size,0);assert.equal(canvas.callbacks.size,0);
 assert.equal(d.snapshot().total,s.total);assert.equal(d.snapshot().frames,s.frames);
 console.log('Bounded opt-in diagnostic recorder / sampling / stop / export isolation PASS');
+const b=boot('?debug').context.softgfxDebug;
+b.setBudgets({drawCalls:4,uploadBytes:36});
+b.frame(4,1,100,0); // baseline, NOT a 100-byte frame
+assert.equal(b.snapshot().budgetStatus.mask,0);
+b.frame(4,1,136,0); // equality is within budget
+assert.equal(b.snapshot().budgetStatus.mask,0);
+b.frame(5,1,173,0);
+assert.equal(b.snapshot().budgetStatus.mask,3);
+const before=b.snapshot().events.filter(e=>e.kind==='budget-exceeded').length;
+for(let i=0;i<100;i++)b.frame(5,1,210+i*37,0);
+assert.equal(b.snapshot().events.filter(e=>e.kind==='budget-exceeded').length,before);
+assert.equal(b.snapshot().budgetStatus.episodes,1);
+b.frame(4,1,3873,0); // previous 3873, no new upload
+assert.equal(b.snapshot().budgetStatus.mask,0);
+assert.equal(b.snapshot().events.at(-1).kind,'budget-recovered');
+b.frame(4,1,0,0); // counter reset cannot be negative upload
+assert.equal(b.snapshot().budgetStatus.unknownFrames,2);
+b.frame(4,1,2147483647,0);
+assert.equal(b.snapshot().budgetStatus.unknownFrames,3);
+assert.throws(()=>b.setBudgets({drawCalls:1,uploadBytes:-1}));
+assert.equal(b.snapshot().budgets.drawCalls,4); // atomic validation
+const snapshot=b.snapshot();snapshot.budgets.drawCalls=99;
+assert.equal(b.snapshot().budgets.drawCalls,4);
+b.setBudgets(null); b.frame(999,1,999,0);
+assert.equal(b.snapshot().budgetStatus.breachFrames,0);
+console.log('Debug budgets / deltas / coalescing / reset / saturation PASS');

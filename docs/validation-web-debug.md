@@ -52,3 +52,7 @@ Game-specific workload presets/release warmup, CPU/GPU/memory budgets, inspector
 seed/state traces. Полные GL-call traces должны включаться отдельно и иметь budget;
 не добавлять blocking GPU diagnostics в normal frame loop. T1/T2 эффекты выбираются
 по измеренным затратам наших сцен, физические устройства — следующим этапом.
+
+Пакет 24: добавлены optional budgets для draw calls и успешных instance upload
+bytes, coalesced transitions и unknown coverage после reset/saturation. См.
+validation-release-budgets.md. CPU/GPU frame-time budgets пока не реализованы.

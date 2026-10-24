@@ -39,3 +39,12 @@ readelf -h build/test_gles_ci_arm64 > build/ci-arm64-header.log
 grep -q 'AArch64' build/ci-arm64-header.log
 run build/ci-compiler-patch.log git -C build/toolchains/Nim apply --reverse --check "$PWD/patches/nim-2.2.4-cproc.patch"
 echo 'Native matrix PASS; ARM64 cross-link ONLY, not ARM execution or a visible window.'
+
+# CPU-only release observations; the same explicit correctness oracles as browsers.
+run build/ci-bench-gcc.log "$NIM" c -r -d:release --nimcache:build/cache-bench-gcc -o:build/bench_gcc tests/bench_release.nim
+run build/ci-bench-llvm.log "$NIM" c -r -d:release --cc:clang \
+  --clang.exe:"$CLANG" --clang.linkerexe:"$CLANG" --nimcache:build/cache-bench-llvm \
+  -o:build/bench_llvm tests/bench_release.nim
+run build/ci-bench-qbe.log "$NIM_CPROC" c -r -d:release -d:nimCproc --threads:off --mm:arc \
+  --cc:gcc --gcc.exe:"$PWD/tools/cproc_cc.py" --gcc.linkerexe:"$PWD/tools/cproc_cc.py" \
+  --nimcache:build/cache-bench-qbe -o:build/bench_qbe tests/bench_release.nim
