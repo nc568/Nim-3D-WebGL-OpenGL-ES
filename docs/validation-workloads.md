@@ -66,3 +66,7 @@ python3 tools/collect_workloads.py browser build/workloads-local.log build/workl
 windows/recovery/profiling и ARM64 cross-link сохранены. Software CI не доказывает
 hardware FPS, mobile performance или ARM execution. Малое demo не переключено на
 spatial grid: для трёх машин это лишняя работа.
+
+Пакет 22 расширяет GPU fixture: теперь 13 pixel comparisons/configuration, три
+range updates и отдельное обновление compact selection. Workload schemaVersion=2;
+подробности byte/call contract — validation-instance-ranges.md.

@@ -231,3 +231,10 @@ Uniform grid использует adaptive in-place prefix sort / dense mark sca
 безусловного O(N) clear+scan. API stable prefix прежний; добавлены ordering counters.
 CPU/GPU workload oracles и strict JSON collectors дают evidence для следующих
 hardware экспериментов, но не подменяют их. См. validation-workloads.md.
+
+## Пакет 22: bounding-span instance uploads
+
+Conditional uploads отправляют только изменённый packed-record span; count changes
+и pending failures требуют full resync. Один диапазон ограничивает GL call overhead,
+но gaps внутри span передаются повторно. Forced APIs не изменены. См.
+validation-instance-ranges.md и актуальный roadmap.md.

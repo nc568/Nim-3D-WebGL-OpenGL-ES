@@ -36,6 +36,7 @@ node build/test_motion.js
 "$NIM" c --nimcache:build/cache-dirty -r -o:build/test_dirty tests/test_dirty.nim
 "$NIM" js -o:build/test_dirty.js tests/test_dirty.nim
 node build/test_dirty.js
+node tools/check_js_hotpath.cjs build/test_dirty.js packing
 "$NIM" c --nimcache:build/cache-identity -r -o:build/test_identity tests/test_identity.nim
 "$NIM" js -o:build/test_identity.js tests/test_identity.nim
 node build/test_identity.js
@@ -63,3 +64,5 @@ if [ -n "${FOSSIL_SRC:-}" ]; then
   "$NIM" js -d:release -d:html --path:"$FOSSIL_SRC" -o:build/ui_overlay.js examples/ui_overlay.nim
   cp examples/ui.html build/ui.html
 fi
+
+node tools/check_js_hotpath.cjs build/test_webgl.js ranges

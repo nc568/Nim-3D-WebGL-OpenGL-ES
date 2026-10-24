@@ -63,3 +63,41 @@ doAssert not effectChanges(cached,settings,delta)
 doAssert effectChanges(cached,settings,delta,force=true)
 for i in 0..<MaxBlobs: doAssert delta.blobs[i]
 echo "dirty packing / GPU float32 equality / effect groups / canonical reset: PASS"
+
+# Reusable half-open record range; changed fields are rounded before comparison.
+var records = @[instance(),instance(),instance(),instance()]
+var shadow = newSeq[float32](4*InstanceFloats)
+var span: InstanceRange
+packInstancesRange(records,shadow,span)
+doAssert span.first == 0 and span.last == 4
+packInstancesRange(records,shadow,span)
+doAssert span.last <= span.first
+records[2].position[0] = 0.5
+packInstancesRange(records,shadow,span)
+doAssert span.first == 2 and span.last == 3
+records[0].yaw = 0.3
+records[3].tint[0] = 0.2
+packInstancesRange(records,shadow,span)
+doAssert span.first == 0 and span.last == 4
+packVisibleRange(records,[0,2],2,shadow,span)
+doAssert span.first == 1 and span.last == 2 # packed slot 1, NOT source index 2
+packVisibleRange(records,[0,2],2,shadow,span)
+doAssert span.last <= span.first
+records[2].position[0] = 0.75
+packVisibleRange(records,[0,2],2,shadow,span)
+doAssert span.first == 1 and span.last == 2
+let oldSpan = span
+let oldValue = shadow[0]
+rejected = false
+try: packVisibleRange(records,[0,0],2,shadow,span)
+except ValueError: rejected = true
+doAssert rejected and span == oldSpan and shadow[0] == oldValue
+records[0].position[0] = 99
+records[3].scale = 0
+rejected = false
+try: packInstancesRange(records,shadow,span)
+except ValueError: rejected = true
+doAssert rejected and span == oldSpan and shadow[0] == oldValue
+packInstancesRange([],shadow,span)
+doAssert span.first == 0 and span.last == 0
+echo "Instance dirty ranges / packed offsets / validation atomicity PASS"

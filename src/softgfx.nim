@@ -20,6 +20,7 @@ type Renderer* = ref object
   matrixBinding: backend.MatrixBinding
   stream: backend.InstanceStream
   instanceData: seq[float32]
+  instanceRange: InstanceRange
   instanceCount, instanceCapacity: int
   count: int
   alive, background: bool
@@ -188,17 +189,20 @@ proc updateVisibleInstances*(r: var Renderer; items: openArray[Instance];
     countBytes(r.stats.instanceUploadBytes,count*InstanceBytes)
 
 
-proc finishConditionalUpdate(r: var Renderer; count: int; changed: bool): bool =
-  if not changed and not r.instancesPending and count == r.instanceCount:
+proc finishConditionalUpdate(r: var Renderer; count: int): bool =
+  if r.instanceRange.last <= r.instanceRange.first and not r.instancesPending and count == r.instanceCount:
     countBytes(r.stats.instanceSkippedUpdates,1)
     return false
+  let full = r.instancesPending or count != r.instanceCount
+  let first = if full: 0 else: r.instanceRange.first
+  let length = if full: count else: r.instanceRange.last-first
   r.instancesPending = true
-  backend.uploadInstances(r.context,r.stream,r.instanceData,count)
+  backend.uploadInstancesRange(r.context,r.stream,r.instanceData,first,length)
   r.instancesPending = false
   r.instanceCount = count
   countBytes(r.stats.instanceUpdates,1)
   if r.stream.mode != fallbackDraws:
-    countBytes(r.stats.instanceUploadBytes,count*InstanceBytes)
+    countBytes(r.stats.instanceUploadBytes,length*InstanceBytes)
   true
 
 proc updateInstancesIfChanged*(r: var Renderer; items: openArray[Instance]): bool {.discardable.} =
@@ -207,8 +211,8 @@ proc updateInstancesIfChanged*(r: var Renderer; items: openArray[Instance]): boo
   if r.instanceCapacity == 0: raise newException(ValueError,"Renderer has no instance capacity")
   if items.len > 0 and r.count > high(int) div items.len:
     raise newException(ValueError,"Submitted vertex statistics exceed host integer range")
-  let changed = packInstancesChanged(items,r.instanceData)
-  r.finishConditionalUpdate(items.len,changed)
+  packInstancesRange(items,r.instanceData,r.instanceRange)
+  r.finishConditionalUpdate(items.len)
 
 proc updateVisibleInstancesIfChanged*(r: var Renderer; items: openArray[Instance];
                                      indices: openArray[int]; count: int): bool {.discardable.} =
@@ -216,5 +220,5 @@ proc updateVisibleInstancesIfChanged*(r: var Renderer; items: openArray[Instance
   if r.instanceCapacity == 0: raise newException(ValueError,"Renderer has no instance capacity")
   if count > 0 and r.count > high(int) div count:
     raise newException(ValueError,"Submitted vertex statistics exceed host integer range")
-  let changed = packVisibleChanged(items,indices,count,r.instanceData)
-  r.finishConditionalUpdate(count,changed)
+  packVisibleRange(items,indices,count,r.instanceData,r.instanceRange)
+  r.finishConditionalUpdate(count)

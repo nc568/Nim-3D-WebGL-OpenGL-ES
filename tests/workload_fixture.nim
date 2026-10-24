@@ -2,6 +2,10 @@
 import std/json
 import softgfx, softgfx/[geometry, culling]
 import instance_fixture
+when defined(js):
+  proc trackRanges(gl: Context) {.importjs: """(function(g){const b=g.bufferSubData;g._ranges=[];g._restoreRanges=()=>{g.bufferSubData=b;};g.bufferSubData=function(t,o,d){g._ranges.push([o,d.byteLength]);return b.call(g,t,o,d);};})(#)""".}
+  proc checkRange(gl: Context; offset, size: int): bool {.importjs: "(function(g,o,s){return g._ranges.length===1 && g._ranges[0][0]===o && g._ranges[0][1]===s;})(#,#,#)".}
+  proc untrackRanges(gl: Context) {.importjs: "#._restoreRanges()".}
 proc runWorkloadProbe*(ctx: Context; caps: Capabilities; read: FrameReader) =
   const count = 256
   const compiler = when defined(js): "js" elif defined(nimCproc): "qbe" elif defined(clang): "llvm" else: "gcc"
@@ -38,6 +42,43 @@ proc runWorkloadProbe*(ctx: Context; caps: Capabilities; read: FrameReader) =
       let saved = reference.stats.instanceUploadBytes-optimized.stats.instanceUploadBytes
       if optimized.instanceMode != fallbackDraws: doAssert saved == 32*count*InstanceBytes
       else: doAssert saved == 0 # fallback has no instance GPU buffer, don't invent savings
+      let rangeBefore = optimized.stats.instanceUploadBytes
+      for step in 0..<3:
+        let first = if step == 0: 119 elif step == 1: 120 else: 0
+        let last = if step < 2: first else: count-1
+        items[first].tint[0] = 0.2
+        items[last].tint[1] = 0.4
+        reference.updateInstances(items)
+        when defined(js): trackRanges(ctx)
+        doAssert optimized.updateInstancesIfChanged(items)
+        when defined(js):
+          if optimized.instanceMode != fallbackDraws:
+            doAssert checkRange(ctx,first*InstanceBytes,(last-first+1)*InstanceBytes)
+          untrackRanges(ctx)
+        reference.renderInstances(64,64)
+        let target = read()
+        optimized.renderInstances(64,64)
+        doAssert read() == target, "Partial upload changed pixels"
+      let rangeBytes = optimized.stats.instanceUploadBytes-rangeBefore
+      doAssert rangeBytes == (if optimized.instanceMode == fallbackDraws: 0 else: (count+2)*InstanceBytes)
+      # Compact selection: source 120 is packed slot 1, offset is one record.
+      reference.updateVisibleInstances(items,[119,120,121],3)
+      optimized.updateVisibleInstances(items,[119,120,121],3)
+      items[120].yaw += 0.2
+      let compactBefore = optimized.stats.instanceUploadBytes
+      when defined(js): trackRanges(ctx)
+      doAssert optimized.updateVisibleInstancesIfChanged(items,[119,120,121],3)
+      when defined(js):
+        if optimized.instanceMode != fallbackDraws:
+          doAssert checkRange(ctx,InstanceBytes,InstanceBytes)
+        untrackRanges(ctx)
+      let compactBytes = optimized.stats.instanceUploadBytes-compactBefore
+      doAssert compactBytes == (if optimized.instanceMode == fallbackDraws: 0 else: InstanceBytes)
+      reference.updateVisibleInstances(items,[119,120,121],3)
+      reference.renderInstances(64,64)
+      let compactImage = read()
+      optimized.renderInstances(64,64)
+      doAssert read() == compactImage
       # Moving snapshots, changing visibility and a fresh rebuild every step.
       for tick in 0..<8:
         for i in 0..<count: items[i].position[0] += 0.04
@@ -60,7 +101,8 @@ proc runWorkloadProbe*(ctx: Context; caps: Capabilities; read: FrameReader) =
         doAssert optimized.stats.drawCalls == (if optimized.instanceMode == fallbackDraws: visible else: int(visible > 0))
       echo "GPU_WORKLOAD ",$(%*{"compiler":compiler,"buildMode":buildMode,"api": $caps.api,"mode": $optimized.instanceMode,
         "forcedFallback":fallback,"instances":count,"staticRequests":32,"savedUploadBytes":saved,
-        "skippedUpdates":optimized.stats.instanceSkippedUpdates,"pixelComparisons":9,
+        "skippedUpdates":optimized.stats.instanceSkippedUpdates,"pixelComparisons":13,
+        "compactUploadBytes":compactBytes,"rangeRequests":3,"rangeUploadBytes":rangeBytes,
         "visible":optimized.stats.instances,"drawCalls":optimized.stats.drawCalls})
     finally:
       optimized.dispose()

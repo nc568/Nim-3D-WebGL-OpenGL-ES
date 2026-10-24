@@ -2,10 +2,12 @@
 import softgfx, softgfx/geometry
 import instance_fixture
 when defined(js):
-  proc track(gl: Context) {.importjs: """(function(g){g._dirty={u:0,b:0,failU:0,failB:0};const u=g.uniform4f,b=g.bufferSubData;g._dirty.restore=()=>{g.uniform4f=u;g.bufferSubData=b;};g.uniform4f=function(...a){g._dirty.u++;if(--g._dirty.failU===0)throw Error('injected uniform failure');return u.apply(g,a);};g.bufferSubData=function(...a){g._dirty.b++;if(--g._dirty.failB===0)throw Error('injected buffer failure');return b.apply(g,a);};})(#)""".}
+  proc track(gl: Context) {.importjs: """(function(g){g._dirty={u:0,b:0,failU:0,failB:0,after:false,bytes:0,offset:0};const u=g.uniform4f,b=g.bufferSubData;g._dirty.restore=()=>{g.uniform4f=u;g.bufferSubData=b;};g.uniform4f=function(...a){g._dirty.u++;if(--g._dirty.failU===0)throw Error('injected uniform failure');return u.apply(g,a);};g.bufferSubData=function(...a){g._dirty.b++;g._dirty.offset=a[1];g._dirty.bytes=a[2].byteLength;if(--g._dirty.failB===0)throw Error('injected buffer failure');const v=b.apply(g,a);if(g._dirty.after){g._dirty.after=false;throw Error('injected post-upload failure');}return v;};})(#)""".}
   proc uniforms(gl: Context): int {.importjs: "#._dirty.u".}
   proc buffers(gl: Context): int {.importjs: "#._dirty.b".}
   proc failUniform(gl: Context) {.importjs: "(#._dirty.failU=2)".}
+  proc failAfterBuffer(gl: Context) {.importjs: "(#._dirty.after=true)".}
+  proc lastBytes(gl: Context): int {.importjs: "#._dirty.bytes".}
   proc failBuffer(gl: Context) {.importjs: "(#._dirty.failB=1)".}
   proc trackDeletes(gl: Context) {.importjs: """(function(g){g._deletes=0;const names=['deleteBuffer','deleteProgram','deleteTexture'];const old=names.map(n=>g[n]);g._restoreDeletes=()=>names.forEach((n,i)=>g[n]=old[i]);names.forEach((n,i)=>g[n]=function(...a){g._deletes++;return old[i].apply(g,a);});})(#)""".}
   proc deletions(gl: Context): int {.importjs: "#._deletes".}
@@ -104,9 +106,32 @@ proc runDirtyProbe*(ctx: Context; caps: Capabilities; read: FrameReader) =
         let attempts = buffers(ctx)
         doAssert r.updateInstancesIfChanged(poses)
         doAssert buffers(ctx) == attempts+1
+        doAssert lastBytes(ctx) == poses.len*InstanceBytes # uncertain GPU requires full resync
         doAssert not r.updateInstancesIfChanged(poses)
         poses[0].position[0] -= 0.1
         discard r.updateInstancesIfChanged(poses)
+        # The GL call may succeed before a wrapper throws. Retrying a DIFFERENT
+        # snapshot must repair the entire buffer, not merely the newest diff.
+        poses[1].position[0] += 0.2
+        failAfterBuffer(ctx)
+        failed = false
+        try: discard r.updateInstancesIfChanged(poses)
+        except: failed = true
+        doAssert failed and lastBytes(ctx) == InstanceBytes
+        let failedAttempts = buffers(ctx)
+        let savedScale = poses[0].scale
+        poses[0].scale = 0
+        failed = false
+        try: discard r.updateInstancesIfChanged(poses)
+        except ValueError: failed = true
+        doAssert failed and buffers(ctx) == failedAttempts
+        poses[0].scale = savedScale
+        poses[1].position[0] -= 0.2
+        doAssert r.updateInstancesIfChanged(poses)
+        doAssert lastBytes(ctx) == poses.len*InstanceBytes
+        r.renderInstances(64,64)
+        doAssert read() == image
+        doAssert not r.updateInstancesIfChanged(poses)
       untrack(ctx)
     # Counters remain saturating on JS int32/native int.
     r.stats.instanceSkippedUpdates = high(int)

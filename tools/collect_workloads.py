@@ -47,12 +47,14 @@ for compiler in expected_gpu:
             assert sum(r['api'] == api and r['mode'] == 'fallbackDraws' for r in rows) >= 1
 for r in gpu:
     assert r['instances'] == 256 and r['staticRequests'] == r['skippedUpdates'] == 32
-    assert r['pixelComparisons'] == 9
+    assert r['pixelComparisons'] == 13 and r['rangeRequests'] == 3
     fallback = r['mode'] == 'fallbackDraws'
+    assert r['compactUploadBytes'] == (0 if fallback else 36)
+    assert r['rangeUploadBytes'] == (0 if fallback else 258*36)
     assert r['savedUploadBytes'] == (0 if fallback else 32*256*36)
     assert r['drawCalls'] == (r['visible'] if fallback else int(r['visible'] > 0))
 output = Path('build') / f'workload-{mode}.json'
-output.write_text(json.dumps({'schemaVersion':1,
+output.write_text(json.dumps({'schemaVersion':2,
     'scope':'Correctness/counters + diagnostic CPU timings; software CI, NOT hardware FPS or full E1-E7',
     'cpu':cpu,'gpu':gpu}, indent=2)+'\n')
 print('Workload report PASS:', output, len(cpu), 'CPU rows,', len(gpu), 'GPU rows')

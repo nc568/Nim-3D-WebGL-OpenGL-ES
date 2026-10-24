@@ -13,7 +13,7 @@ type
   InstanceStream* = object
     mode*: InstanceMode
     buffer, extension, storage, view: JsObject
-    used: int
+    used, first: int
   MatrixBinding* = object
     location, data: JsObject
 
@@ -133,14 +133,18 @@ proc createInstanceStream*(gl: Context; api: Api; capacity: int; forceFallback: 
     gl.bufferData(0x8892,capacity*InstanceBytes,0x88E8)
     result.storage = instanceStorage(capacity*InstanceFloats)
 
-proc uploadInstances*(gl: Context; stream: var InstanceStream; data: seq[float32]; count: int) =
+proc uploadInstancesRange*(gl: Context; stream: var InstanceStream; data: seq[float32]; first, count: int) =
   if stream.mode == fallbackDraws or count == 0: return
-  for i in 0..<count*InstanceFloats: setElement(stream.storage,i,data[i])
-  if stream.used != count:
-    stream.view = stream.storage.subarray(0,count*InstanceFloats)
+  for i in first*InstanceFloats..<(first+count)*InstanceFloats: setElement(stream.storage,i,data[i])
+  if stream.used != count or stream.first != first:
+    stream.view = stream.storage.subarray(first*InstanceFloats,(first+count)*InstanceFloats)
+    stream.first = first
     stream.used = count
   gl.bindBuffer(0x8892,stream.buffer)
-  gl.bufferSubData(0x8892,0,stream.view)
+  gl.bufferSubData(0x8892,first*InstanceBytes,stream.view)
+
+proc uploadInstances*(gl: Context; stream: var InstanceStream; data: seq[float32]; count: int) =
+  gl.uploadInstancesRange(stream,data,0,count)
 
 proc destroyInstanceStream*(gl: Context; stream: InstanceStream) =
   gl.deleteBuffer(stream.buffer)

@@ -1,6 +1,6 @@
 # softgfx — Nim → pure JS / native GLES
 
-Десятый **экспериментальный вертикальный срез**, не готовый игровой движок.
+**Экспериментальный graphics middleware**, не готовый игровой движок.
 Один пример сцены на Nim собирается в JavaScript без WASM для WebGL1/2 и
 в C для GLES2/3. Требуется Nim 2.2.4. Зависимостей Nim у ядра нет.
 
@@ -46,11 +46,13 @@
 - Browser demo восстанавливает ресурсы после context loss.
 - Необязательный пример композиции с HTML-драйвером UIRelays.
 
-**Важные ограничения:** это ещё не полноценный renderer authoritative игровых
-снапшотов: нет entity ID/lifetime mapping, network jitter buffer, spatial index
-и сортировки. Нет shadow maps, законченного T1/T2
-и оконных/mobile host-адаптеров. cproc пока проверен только на Linux x86-64, ARC,
-без потоков. Нет доказательств производительности на физическом GPU.
+**Важные ограничения:** есть explicit entity-ID history, spatial grid и Linux SDL2
+window host, но нет network jitter buffer, мобильных host-адаптеров, shadow maps
+и законченного T1/T2. cproc runtime проверен на Linux x86-64, ARC, без потоков;
+ARM64 пока только cross-link. Software CI не доказывает производительность на
+физическом GPU. Vulkan/Metal остаются будущими backend'ами.
+
+Текущие возможности и оставшиеся этапы: [roadmap](docs/roadmap.md).
 
 ## Быстрый старт
 

@@ -109,3 +109,34 @@ proc packVisibleChanged*(items: openArray[Instance]; indices: openArray[int]; co
     previous = indices[i]
   for i in 0..<count:
     if packRecordChanged(items,indices[i],i*InstanceFloats,data): result = true
+
+# Half-open packed-record span, not source IDs. Reused by Renderer across updates.
+type InstanceRange* = object
+  first*, last*: int
+
+proc packInstancesRange*(items: openArray[Instance]; data: var seq[float32];
+                         changed: var InstanceRange) =
+  items.validate(data.len div InstanceFloats)
+  changed.first = items.len
+  changed.last = 0
+  for i in 0..<items.len:
+    if packRecordChanged(items,i,i*InstanceFloats,data):
+      if changed.last == 0: changed.first = i
+      changed.last = i+1
+
+proc packVisibleRange*(items: openArray[Instance]; indices: openArray[int]; count: int;
+                       data: var seq[float32]; changed: var InstanceRange) =
+  items.validate(MaxInstances)
+  if count < 0 or count > indices.len or count > data.len div InstanceFloats:
+    raise newException(ValueError,"Visible count exceeds capacity")
+  var previous = -1
+  for i in 0..<count:
+    if indices[i] <= previous or indices[i] >= items.len:
+      raise newException(ValueError,"Visible indices must be increasing and in range")
+    previous = indices[i]
+  changed.first = count
+  changed.last = 0
+  for i in 0..<count:
+    if packRecordChanged(items,indices[i],i*InstanceFloats,data):
+      if changed.last == 0: changed.first = i
+      changed.last = i+1

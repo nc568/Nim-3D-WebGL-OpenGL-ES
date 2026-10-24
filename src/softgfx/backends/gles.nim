@@ -303,10 +303,13 @@ proc createInstanceStream*(gl: Context; api: Api; capacity: int; forceFallback: 
     gl.glBindBuffer(0x8892,result.buffer)
     gl.glBufferData(0x8892,capacity*InstanceBytes,nil,0x88E8)
 
-proc uploadInstances*(gl: Context; stream: var InstanceStream; data: seq[float32]; count: int) =
+proc uploadInstancesRange*(gl: Context; stream: var InstanceStream; data: seq[float32]; first, count: int) =
   if stream.mode == fallbackDraws or count == 0: return
   gl.glBindBuffer(0x8892,stream.buffer)
-  gl.glBufferSubData(0x8892,0,count*InstanceBytes,unsafeAddr data[0])
+  gl.glBufferSubData(0x8892,first*InstanceBytes,count*InstanceBytes,unsafeAddr data[first*InstanceFloats])
+
+proc uploadInstances*(gl: Context; stream: var InstanceStream; data: seq[float32]; count: int) =
+  gl.uploadInstancesRange(stream,data,0,count)
 
 proc destroyInstanceStream*(gl: Context; stream: InstanceStream) =
   var id = stream.buffer
