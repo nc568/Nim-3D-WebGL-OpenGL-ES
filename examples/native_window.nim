@@ -4,8 +4,8 @@ import softgfx, softgfx/backends/gles, softgfx/hosts/sdl2
 import softgfx/motion
 import scene
 
-proc run(version: int; smoke: bool) =
-  let host = openWindow(version,if smoke: 320 else: 800,if smoke: 240 else: 600)
+proc run(version: int; smoke, desktopTest: bool) =
+  let host = openWindow(version,if smoke or desktopTest: 320 else: 800,if smoke or desktopTest: 240 else: 600)
   var ground, cars: Renderer
   var pipeline: Pipeline
   try:
@@ -18,7 +18,7 @@ proc run(version: int; smoke: bool) =
     echo "SDL window GLES",version," driver: ",$getString(0x1F02)," / ",$getString(0x1F01)
     if not ($getString(0x1F02)).startsWith("OpenGL ES"):
       raise newException(IOError,"Desktop GL is not the GLES test target")
-    if smoke and not ($getString(0x1F02)).startsWith("OpenGL ES " & $version & "."):
+    if (smoke or desktopTest) and not ($getString(0x1F02)).startsWith("OpenGL ES " & $version & "."):
       raise newException(IOError,"Smoke test requires the requested ES major version, not a newer context")
     ground = initRenderer(gl,caps,arenaMesh(version == 2,includeCars=false),arenaOwners())
     cars = initRenderer(gl,caps,carMesh(version == 2),instanceCapacity=3)
@@ -27,11 +27,22 @@ proc run(version: int; smoke: bool) =
     previous.setLen(3); current.setLen(3); rendered.setLen(3)
     carSnapshot(0,current)
     interpolateInstances(current,current,1,previous)
+    interpolateInstances(current,current,1,rendered)
     var clock = initFixedClock(stepSeconds=0.05,maxSteps=4)
-    var phase = 0'f32
+    var phase, previousPhase, renderedPhase: float32
+    var paused = false
+    var ticks = 0
+    template freezeMotion() =
+      phase = renderedPhase
+      previousPhase = phase
+      interpolateInstances(rendered,rendered,1,previous)
+      interpolateInstances(rendered,rendered,1,current)
+      clock.reset()
     var angle = 0.6'f32
     var distance = 15'f32
     var last = seconds()
+    let started = last
+    var reported = last-1
     var frames, presented, skipped, resizes: int
     var oldWidth = 0
     var quitSeen = false
@@ -51,19 +62,28 @@ proc run(version: int; smoke: bool) =
       let delta = max(0.0,now-last)
       last = now
       let size = host.drawableSize()
-      if host.suspended() or size.width <= 0 or size.height <= 0:
-        clock.reset()
+      let focused = host.focused()
+      let minimized = host.minimized()
+      if host.suspended() or (not smoke and not focused) or size.width <= 0 or size.height <= 0:
+        if not paused: freezeMotion()
+        paused = true
         inc skipped
         idle()
       else:
-        angle += float32(min(delta,0.1))*float32(input.orbit)
-        distance = clamp(distance+float32(min(delta,0.1))*float32(input.zoom)*5,5'f32,30'f32)
-        let plan = clock.advance(delta)
+        let elapsed = if paused: 0.0 else: delta
+        paused = false
+        angle += float32(min(elapsed,0.1))*float32(input.orbit)
+        distance = clamp(distance+float32(min(elapsed,0.1))*float32(input.zoom)*5,5'f32,30'f32)
+        let plan = clock.advance(elapsed)
+        if plan.paused: freezeMotion()
         for step in 0..<plan.steps:
           interpolateInstances(current,current,1,previous)
+          previousPhase = phase
           phase += float32(clock.stepSeconds)
+          inc ticks
           carSnapshot(phase,current)
         interpolateInstances(previous,current,plan.alpha,rendered)
+        renderedPhase = previousPhase+(phase-previousPhase)*float32(plan.alpha)
         cars.updateInstancesIfChanged(rendered)
         if pipeline.beginFrame(size.width,size.height):
           try:
@@ -73,7 +93,7 @@ proc run(version: int; smoke: bool) =
             cars.renderInstances(target.width,target.height,matrix,clear=false)
             pipeline.endFrame()
           finally: pipeline.cancelFrame()
-        if smoke:
+        if smoke or desktopTest:
           doAssert getError() == 0
           if oldWidth != size.width:
             inc resizes
@@ -88,8 +108,21 @@ proc run(version: int; smoke: bool) =
             doAssert getError() == 0
         host.swap()
         inc presented
+      if desktopTest and now-reported >= 0.1:
+        echo "HOST presents=",presented," skips=",skipped," ticks=",ticks,
+          " paused=",ord(paused)," focused=",ord(focused)," minimized=",ord(minimized),
+          " width=",size.width," height=",size.height," angle=",angle,
+          " distance=",distance," phase=",renderedPhase
+        stdout.flushFile()
+        reported = now
+      if desktopTest and now-started > 60:
+        raise newException(IOError,"Desktop harness did not close the window within 60 seconds")
       inc frames
       if smoke and frames > 65: raise newException(IOError,"Quit event was not consumed")
+    if desktopTest:
+      doAssert quitSeen and presented > 0
+      echo "DESKTOP PASS: real window quit consumed"
+      stdout.flushFile()
     if smoke:
       doAssert quitSeen and presented > 20 and skipped >= 2 and resizes > 5
       echo "WINDOW PASS: presents=",presented," hidden-skips=",skipped," drawable-resizes=",resizes," quit=",quitSeen
@@ -102,7 +135,7 @@ proc run(version: int; smoke: bool) =
     finally:
       host.close()
       host.close()
-      if smoke:
+      if smoke or desktopTest:
         var rejected = false
         try: discard host.drawableSize()
         except ValueError: rejected = true
@@ -110,5 +143,6 @@ proc run(version: int; smoke: bool) =
 
 let smoke = "--smoke" in commandLineParams()
 let version = if "--gles2" in commandLineParams(): 2 else: 3
-run(version,smoke)
-if smoke: run(version,true) # SDL/window/context recreation, not only resource recreation
+let desktopTest = "--desktop-test" in commandLineParams()
+run(version,smoke,desktopTest)
+if smoke: run(version,true,false) # SDL/window/context recreation, not only resource recreation

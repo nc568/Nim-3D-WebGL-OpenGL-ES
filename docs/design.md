@@ -202,3 +202,10 @@ Linux SDL2 host отделён от renderer: window/event/drawable/swap lifecyc
 simulation и teardown до уничтожения context. CI получает Xvfb/Mesa window path
 для GCC/LLVM/QBE GLES2/3; физический GPU/монитор/mobile не подменяются виртуальным
 X server. См. validation-window.md.
+
+## Уточнение после восемнадцатого среза
+
+SDL demo использует focus-aware pause/resume с сохранением rendered history.
+Openbox/XTest integration проверяет native input/window-manager путь в дополнение
+к SDL synthetic-quit smoke. Это virtual software desktop, не hardware acceptance.
+См. validation-desktop-input.md.

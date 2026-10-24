@@ -83,6 +83,12 @@ proc drawableSize*(host: SdlWindow): tuple[width,height:int] =
   var w,h: cint
   SDL_GL_GetDrawableSize(host.window,addr w,addr h)
   (int(w),int(h))
+proc focused*(host: SdlWindow): bool =
+  host.requireWindow()
+  (SDL_GetWindowFlags(host.window) and 0x200'u32) != 0
+proc minimized*(host: SdlWindow): bool =
+  host.requireWindow()
+  (SDL_GetWindowFlags(host.window) and 0x40'u32) != 0
 proc suspended*(host: SdlWindow): bool =
   host.requireWindow()
   (SDL_GetWindowFlags(host.window) and (0x8'u32 or 0x40)) != 0
@@ -107,9 +113,12 @@ proc poll*(host: SdlWindow): WindowInput =
     let kind = cast[ptr uint32](addr event[0])[]
     if kind == 0x100 or (kind == 0x200 and cast[ptr UncheckedArray[uint8]](addr event[0])[12] == 14):
       result.quit = true
+    # Preserve short Escape presses even if key-up is also queued before polling.
+    if kind == 0x300 and cast[ptr UncheckedArray[int32]](addr event[0])[5] == 27:
+      result.quit = true
   var count: cint
   let keys = SDL_GetKeyboardState(addr count)
-  if keys != nil and count > 80:
+  if host.focused() and keys != nil and count > 80:
     result.quit = result.quit or keys[41] != 0
     result.orbit = int(keys[79] != 0)-int(keys[80] != 0)
     result.zoom = int(keys[22] != 0)-int(keys[26] != 0)

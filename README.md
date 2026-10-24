@@ -328,3 +328,8 @@ drawable-size rendering, 20 Hz interpolation, стрелки/W/S, Escape/close.
 `tools/test_window.sh` проверяет GCC/LLVM/cproc-QBE оконный путь под Xvfb/Mesa,
 отдельно от EGL pbuffer. Это software-window validation, **не hardware FPS**.
 [Запуск, зависимости и границы](docs/validation-window.md).
+
+Desktop CI также использует Openbox + XTest: keyboard camera control, focus loss,
+minimize/restore, resize, WM close и Escape. Interactive host замораживает движение
+и rendering без focus, сохраняя displayed pose при resume.
+[Desktop input/lifecycle](docs/validation-desktop-input.md).
