@@ -15,7 +15,41 @@ when defined(js):
   proc untrack(gl: Context) {.importjs: "#._dirty.restore()".}
 
 
+when defined(js):
+  import softgfx/backends/web as low
+  proc trackStorage(gl: Context) {.importjs: """(function(g){const b=g.bufferSubData;g._restoreStorage=()=>{g.bufferSubData=b;delete g._lastStorage;};g.bufferSubData=function(t,o,d){g._lastStorage=d;return b.call(g,t,o,d);};})(#)""".}
+  proc sameBacking(gl: Context; data: seq[float32]): bool {.importjs: "(#._lastStorage.buffer === #.buffer)".}
+  proc floatUpload(gl: Context): bool {.importjs: "(#._lastStorage instanceof Float32Array)".}
+  proc firstUpload(gl: Context): float32 {.importjs: "#._lastStorage[0]".}
+  proc restoreStorage(gl: Context) {.importjs: "#._restoreStorage()".}
+  proc releasedStorage(r: Renderer): bool {.importjs: "(function(r){return r.instanceData.length===0 && r.stream.storage==null && r.stream.view==null;})(#)".}
+  proc storageProbe(ctx: Context; caps: Capabilities) =
+    var stream = low.createInstanceStream(ctx,caps.api,2,false)
+    try:
+      if stream.mode != fallbackDraws:
+        trackStorage(ctx)
+        try:
+          var a = newInstanceData(2)
+          var b = newInstanceData(2)
+          a[0] = 1; b[0] = 2
+          low.uploadInstances(ctx,stream,a,2)
+          doAssert sameBacking(ctx,a)
+          low.uploadInstances(ctx,stream,b,2)
+          doAssert sameBacking(ctx,b) and firstUpload(ctx) == 2
+          var ordinary = newSeq[float32](2*InstanceFloats)
+          ordinary[0] = 3
+          low.uploadInstances(ctx,stream,ordinary,2)
+          doAssert floatUpload(ctx) and firstUpload(ctx) == 3
+          ordinary[0] = 4
+          low.uploadInstances(ctx,stream,ordinary,2)
+          doAssert firstUpload(ctx) == 4
+          low.uploadInstances(ctx,stream,a,2)
+          doAssert sameBacking(ctx,a) and firstUpload(ctx) == 1
+        finally: restoreStorage(ctx)
+    finally: low.destroyInstanceStream(ctx,stream)
+
 proc runDirtyProbe*(ctx: Context; caps: Capabilities; read: FrameReader) =
+  when defined(js): storageProbe(ctx,caps)
   var mesh: MeshData
   mesh.addBox([0'f32,0,0],[0.5'f32,0.5,0.5],[0.7'f32,0.5,0.3])
   var poses = @[instance([-0.4'f32,0,0],yaw=0.3,scale=0.7),instance([0.4'f32,0,0])]
@@ -142,6 +176,7 @@ proc runDirtyProbe*(ctx: Context; caps: Capabilities; read: FrameReader) =
     var alias = r
     when defined(js): trackDeletes(ctx)
     alias.dispose()
+    when defined(js): doAssert releasedStorage(r)
     when defined(js):
       let deleted = deletions(ctx)
       doAssert deleted > 0

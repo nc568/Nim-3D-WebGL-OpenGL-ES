@@ -3,8 +3,10 @@ import std/json
 import softgfx, softgfx/[geometry, culling]
 import instance_fixture
 when defined(js):
-  proc trackRanges(gl: Context) {.importjs: """(function(g){const b=g.bufferSubData;g._ranges=[];g._restoreRanges=()=>{g.bufferSubData=b;};g.bufferSubData=function(t,o,d){g._ranges.push([o,d.byteLength]);return b.call(g,t,o,d);};})(#)""".}
+  proc trackRanges(gl: Context) {.importjs: """(function(g){const b=g.bufferSubData;g._ranges=[];g._restoreRanges=()=>{g.bufferSubData=b;};g.bufferSubData=function(t,o,d){g._ranges.push([o,d.byteLength]);g._rangeData=d;return b.call(g,t,o,d);};})(#)""".}
   proc checkRange(gl: Context; offset, size: int): bool {.importjs: "(function(g,o,s){return g._ranges.length===1 && g._ranges[0][0]===o && g._ranges[0][1]===s;})(#,#,#)".}
+  # Intentional pinned-codegen assertion on private storage; not a public API.
+  proc sharedShadow(gl: Context; r: Renderer): bool {.importjs: "(function(g,r){return r.instanceData instanceof Float32Array && g._rangeData.buffer===r.instanceData.buffer;})(#,#)".}
   proc untrackRanges(gl: Context) {.importjs: "#._restoreRanges()".}
 proc runWorkloadProbe*(ctx: Context; caps: Capabilities; read: FrameReader) =
   const count = 256
@@ -54,6 +56,7 @@ proc runWorkloadProbe*(ctx: Context; caps: Capabilities; read: FrameReader) =
         when defined(js):
           if optimized.instanceMode != fallbackDraws:
             doAssert checkRange(ctx,first*InstanceBytes,(last-first+1)*InstanceBytes)
+            doAssert sharedShadow(ctx,optimized)
           untrackRanges(ctx)
         reference.renderInstances(64,64)
         let target = read()
@@ -71,6 +74,7 @@ proc runWorkloadProbe*(ctx: Context; caps: Capabilities; read: FrameReader) =
       when defined(js):
         if optimized.instanceMode != fallbackDraws:
           doAssert checkRange(ctx,InstanceBytes,InstanceBytes)
+          doAssert sharedShadow(ctx,optimized)
         untrackRanges(ctx)
       let compactBytes = optimized.stats.instanceUploadBytes-compactBefore
       doAssert compactBytes == (if optimized.instanceMode == fallbackDraws: 0 else: InstanceBytes)

@@ -101,3 +101,26 @@ doAssert rejected and span == oldSpan and shadow[0] == oldValue
 packInstancesRange([],shadow,span)
 doAssert span.first == 0 and span.last == 0
 echo "Instance dirty ranges / packed offsets / validation atomicity PASS"
+
+# Production packed storage has canonical float32 values on JS as well as native.
+var direct = newInstanceData(4)
+when defined(js):
+  proc float32Buffer(data: seq[float32]): bool {.importjs: "(# instanceof Float32Array)".}
+  doAssert float32Buffer(direct)
+records[3].scale = 1
+packInstancesRange(records,direct,span)
+packInstances(records,shadow)
+doAssert direct == shadow
+packInstancesRange(records,direct,span)
+doAssert span.last <= span.first
+records[1].yaw = 0.12345
+packInstancesRange(records,direct,span)
+doAssert span.first == 1 and span.last == 2
+packInstances(records,shadow)
+doAssert direct == shadow
+for capacity in [0,MaxInstances+1]:
+  rejected = false
+  try: discard newInstanceData(capacity)
+  except ValueError: rejected = true
+  doAssert rejected
+echo "Float32 packed storage / range parity PASS"

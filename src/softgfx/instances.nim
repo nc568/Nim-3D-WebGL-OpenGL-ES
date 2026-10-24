@@ -14,6 +14,15 @@ const InstanceFloats* = 9
 const InstanceBytes* = InstanceFloats * 4
 const MaxInstances* = 65535 # Deliberate per-batch CPU/GPU allocation budget.
 
+proc newInstanceData*(capacity: int): seq[float32] =
+  ## Fixed-capacity packed shadow. Do not resize; a resized JS seq may lose float32 storage.
+  if capacity < 1 or capacity > MaxInstances:
+    raise newException(ValueError,"Invalid instance storage capacity")
+  when defined(js):
+    # Direct result assignment avoids Nim JS nimCopy coercing back to Float64Array.
+    {.emit: "`result` = new Float32Array(`capacity` * 9);".}
+  else: result = newSeq[float32](capacity*InstanceFloats)
+
 func instance*(position: Vec3 = [0'f32,0,0]; yaw = 0'f32;
                scale = 1'f32; tint: Vec3 = [1'f32,1,1]): Instance =
   Instance(position: position, yaw: yaw, scale: scale, tint: tint)

@@ -53,7 +53,11 @@ proc initRenderer*(context: Context; caps: Capabilities; mesh: MeshData; owners:
     result.stats.textureBytes = result.owners.width * result.owners.height + 1024
     if instanceCapacity > 0:
       result.stream = backend.createInstanceStream(context,caps.api,instanceCapacity,forceFallback)
-      result.instanceData = newSeq[float32](instanceCapacity*InstanceFloats)
+      var packedShadow = newInstanceData(instanceCapacity)
+      when defined(js):
+        # Nim field assignment (even move) copies seqs into Float64Array.
+        {.emit: "`result`.instanceData = `packedShadow`;".}
+      else: result.instanceData = move(packedShadow)
       result.instanceCapacity = instanceCapacity
       if result.stream.mode != fallbackDraws:
         result.stats.bufferBytes += instanceCapacity*InstanceBytes
@@ -131,8 +135,10 @@ proc dispose*(r: var Renderer) =
   ## Shared handle: all aliases observe disposal. Original context must be current.
   if not r.isNil and r.alive:
     r.alive = false # invalidate aliases BEFORE issuing driver calls
-    backend.destroyInstanceStream(r.context,r.stream)
-    r.instanceData.setLen(0)
+    try: backend.destroyInstanceStream(r.context,r.stream)
+    finally:
+      r.instanceData = @[]
+      r.stream = default(backend.InstanceStream)
     backend.destroyIndices(r.context,r.indices)
     backend.destroyTerritory(r.context,r.territoryBinding)
     backend.destroy(r.context, r.program, r.buffer)
@@ -142,7 +148,8 @@ proc abandon*(r: var Renderer) =
   ## Context LOST only. No GL calls; all aliases become invalid.
   if r.isNil: return
   r.alive = false
-  r.instanceData.setLen(0)
+  r.instanceData = @[]
+  r.stream = default(backend.InstanceStream)
 
 proc updateEffects*(r: var Renderer; settings: SceneEffects; force = false) =
   if r.isNil or not r.alive: raise newException(ValueError,"Renderer is disposed")

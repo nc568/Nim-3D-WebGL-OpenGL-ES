@@ -369,3 +369,7 @@ Release CPU workloads теперь прогоняются во всех трёх
 median/p95 и raw samples. В `?debug` доступен `softgfxDebug.setBudgets(...)` для
 проверки draw-call/instance-upload budgets без автоматического изменения качества.
 [Контракт и ограничения](docs/validation-release-budgets.md).
+
+WebGL instance uploads используют общий Float32Array shadow без дополнительной
+staging copy в renderer path. Release reports дополнены static/moving demo CPU
+submission samples (не GPU FPS). [Контракт](docs/validation-direct-shadow.md).

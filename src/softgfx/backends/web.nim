@@ -14,6 +14,7 @@ type
     mode*: InstanceMode
     buffer, extension, storage, view: JsObject
     used, first: int
+    copied: bool
   MatrixBinding* = object
     location, data: JsObject
 
@@ -131,11 +132,31 @@ proc createInstanceStream*(gl: Context; api: Api; capacity: int; forceFallback: 
     result.buffer = gl.createBuffer()
     gl.bindBuffer(0x8892,result.buffer)
     gl.bufferData(0x8892,capacity*InstanceBytes,0x88E8)
-    result.storage = instanceStorage(capacity*InstanceFloats)
+
+
+proc packedObject(data: seq[float32]): JsObject {.importjs: "#".}
+proc isFloat32(data: seq[float32]): bool {.importjs: "(# instanceof Float32Array)".}
+proc sameStorage(a,b: JsObject): bool {.importjs: "(# === #)".}
+proc storageLength(data: JsObject): int {.importjs: "#.length".}
+
+proc copyInstanceStorage(stream: var InstanceStream; data: seq[float32]; first,count: int) =
+  # Compatibility for direct backend callers using Nim's ordinary Float64Array seq.
+  if not stream.copied or storageLength(stream.storage) != data.len:
+    stream.storage = instanceStorage(data.len)
+    stream.used = -1
+  stream.copied = true
+  for i in first*InstanceFloats..<(first+count)*InstanceFloats: setElement(stream.storage,i,data[i])
 
 proc uploadInstancesRange*(gl: Context; stream: var InstanceStream; data: seq[float32]; first, count: int) =
   if stream.mode == fallbackDraws or count == 0: return
-  for i in first*InstanceFloats..<(first+count)*InstanceFloats: setElement(stream.storage,i,data[i])
+  if isFloat32(data):
+    let source = packedObject(data)
+    if not sameStorage(stream.storage,source):
+      stream.storage = source
+      stream.used = -1 # views must follow backing identity, not merely first/count
+    stream.copied = false
+  else:
+    copyInstanceStorage(stream,data,first,count)
   if stream.used != count or stream.first != first:
     stream.view = stream.storage.subarray(first*InstanceFloats,(first+count)*InstanceFloats)
     stream.first = first

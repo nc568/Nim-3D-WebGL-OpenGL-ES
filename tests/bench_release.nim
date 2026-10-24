@@ -32,8 +32,8 @@ proc benchmark(count: int; moving, dense: bool): string =
   let view = frustum(matrix)
   var flat = newSeq[int](count)
   var selected = newSeq[int](count)
-  var packed = newSeq[float32](count*InstanceFloats)
-  var forced = newSeq[float32](count*InstanceFloats)
+  var packed = newInstanceData(count)
+  var forced = newInstanceData(count)
   var stats: GridQueryStats
   var span: InstanceRange
   var packing, forcing, rebuilding, flatQuery, gridQuery: seq[float64]
