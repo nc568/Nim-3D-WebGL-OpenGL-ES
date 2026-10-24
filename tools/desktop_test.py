@@ -108,6 +108,15 @@ def exercise(executable, api, full):
                 command('xdotool', 'windowsize', window, str(width), str(height))
                 app.wait(lambda s: s['width'] == width and s['height'] == height and s['paused'] == 0,
                          after=time.monotonic())
+            for generation in (1, 2):
+                command('xdotool', 'key', '--clearmodifiers', 'r')
+                app.wait(lambda s: s['recreations'] == generation, after=time.monotonic())
+                # SDL video teardown destroys the X window ID; never reuse it.
+                window = command('xdotool', 'search', '--sync', '--all', '--pid', str(app.process.pid),
+                                 '--name', 'Nim GLES').splitlines()[0]
+                command('xdotool', 'windowactivate', '--sync', window)
+                app.wait(lambda s: s['paused'] == 0 and s['focused'] == 1, after=time.monotonic())
+            assert sum(line.startswith('RECREATE PASS:') for line in app.lines) == 2
             command('xdotool', 'key', '--clearmodifiers', 'alt+F4') # Openbox WM_DELETE_WINDOW
         else:
             command('xdotool', 'key', '--clearmodifiers', 'Escape')
@@ -127,6 +136,6 @@ try:
         time.sleep(0.05)
     exercise(sys.argv[1], sys.argv[2], True)
     exercise(sys.argv[1], sys.argv[2], False)
-    print('DESKTOP INPUT PASS: keyboard, unfocused freeze, minimize/restore, resize, WM close, Escape', flush=True)
+    print('DESKTOP INPUT PASS: keyboard, unfocused freeze, minimize/restore, resize, recreation pixel parity, WM close, Escape', flush=True)
 finally:
     stop(wm)

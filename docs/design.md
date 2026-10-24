@@ -209,3 +209,10 @@ SDL demo использует focus-aware pause/resume с сохранением
 Openbox/XTest integration проверяет native input/window-manager путь в дополнение
 к SDL synthetic-quit smoke. Это virtual software desktop, не hardware acceptance.
 См. validation-desktop-input.md.
+
+## Уточнение после девятнадцатого среза
+
+Native demo отделяет retained CPU state от пересоздаваемых GPU resources.
+R инициирует planned window/context recreation с новым scope guard и повторным
+resolver lookup. Hardware-loss detection/abandon path не добавлен. См.
+validation-native-recreation.md.

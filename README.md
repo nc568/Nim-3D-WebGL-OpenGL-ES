@@ -333,3 +333,9 @@ Desktop CI также использует Openbox + XTest: keyboard camera cont
 minimize/restore, resize, WM close и Escape. Interactive host замораживает движение
 и rendering без focus, сохраняя displayed pose при resume.
 [Desktop input/lifecycle](docs/validation-desktop-input.md).
+
+В native demo клавиша **R** пересоздаёт SDL окно/GL context из retained CPU state:
+poses, owner edits, camera и post settings сохраняются. Smoke/desktop tests
+сравнивают полный framebuffer до/после и проверяют старые handles.
+Это planned recreation, не driver-reset recovery:
+[контракт и validation](docs/validation-native-recreation.md).

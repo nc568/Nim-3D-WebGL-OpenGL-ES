@@ -5,24 +5,44 @@ import softgfx/motion
 import scene
 
 proc run(version: int; smoke, desktopTest: bool) =
-  let host = openWindow(version,if smoke or desktopTest: 320 else: 800,if smoke or desktopTest: 240 else: 600)
+  var host = openWindow(version,if smoke or desktopTest: 320 else: 800,if smoke or desktopTest: 240 else: 600)
   var ground, cars: Renderer
   var pipeline: Pipeline
-  try:
+  let groundAsset = arenaMesh(version == 2,includeCars=false)
+  let carAsset = carMesh(version == 2)
+  let owners = arenaOwners() # retained CPU state, including edits
+  var scopes: ContextScopes
+  var post = defaultPost()
+  if smoke:
+    post.scale = 0.85
+    post.exposure = 1.1
+    post.vignette = 0.2
+  var getError: proc(): uint32 {.cdecl.}
+  var readPixels: proc(x,y,w,h: int32; format,kind:uint32; pixels:pointer) {.cdecl.}
+  proc createGraphics() =
     let gl = acquire(SDL_GL_GetProcAddress)
     let caps = baseline(if version == 2: gles2 else: gles3)
     let getString = cast[proc(name: uint32): cstring {.cdecl.}](SDL_GL_GetProcAddress("glGetString"))
-    let getError = cast[proc(): uint32 {.cdecl.}](SDL_GL_GetProcAddress("glGetError"))
-    let readPixels = cast[proc(x,y,w,h: int32; format,kind:uint32; pixels:pointer) {.cdecl.}](SDL_GL_GetProcAddress("glReadPixels"))
+    getError = cast[proc(): uint32 {.cdecl.}](SDL_GL_GetProcAddress("glGetError"))
+    readPixels = cast[proc(x,y,w,h: int32; format,kind:uint32; pixels:pointer) {.cdecl.}](SDL_GL_GetProcAddress("glReadPixels"))
     if getString == nil or getError == nil or readPixels == nil: raise newException(IOError,"Missing GL entry points")
     echo "SDL window GLES",version," driver: ",$getString(0x1F02)," / ",$getString(0x1F01)
     if not ($getString(0x1F02)).startsWith("OpenGL ES"):
       raise newException(IOError,"Desktop GL is not the GLES test target")
     if (smoke or desktopTest) and not ($getString(0x1F02)).startsWith("OpenGL ES " & $version & "."):
       raise newException(IOError,"Smoke test requires the requested ES major version, not a newer context")
-    ground = initRenderer(gl,caps,arenaMesh(version == 2,includeCars=false),arenaOwners())
-    cars = initRenderer(gl,caps,carMesh(version == 2),instanceCapacity=3)
-    pipeline = initPipeline(gl,caps,scopes=newContextScopes())
+    scopes = newContextScopes()
+    ground = initRenderer(gl,caps,groundAsset,owners)
+    cars = initRenderer(gl,caps,carAsset,instanceCapacity=3)
+    pipeline = initPipeline(gl,caps,scopes=scopes)
+  proc disposeGraphics() =
+    # Even if one cleanup fails, attempt the other independent owners before close.
+    try: pipeline.dispose()
+    finally:
+      try: cars.dispose()
+      finally: ground.dispose()
+  try:
+    createGraphics()
     var previous, current, rendered: seq[Instance]
     previous.setLen(3); current.setLen(3); rendered.setLen(3)
     carSnapshot(0,current)
@@ -46,6 +66,17 @@ proc run(version: int; smoke, desktopTest: bool) =
     var frames, presented, skipped, resizes: int
     var oldWidth = 0
     var quitSeen = false
+    var recreations = 0
+    proc drawScene(size: SurfaceSize) =
+      cars.updateInstancesIfChanged(rendered)
+      if pipeline.beginFrame(size.width,size.height,post):
+        try:
+          let target = pipeline.renderSize()
+          let matrix = arenaCamera(angle,distance).viewProjection(float32(size.width)/float32(size.height))
+          ground.render(target.width,target.height,matrix,clear=false)
+          cars.renderInstances(target.width,target.height,matrix,clear=false)
+          pipeline.endFrame()
+        finally: pipeline.cancelFrame()
     var pixels: seq[uint8] # test readback allocation, never interactive hot path
     while true:
       if smoke:
@@ -58,6 +89,56 @@ proc run(version: int; smoke, desktopTest: bool) =
       if input.quit:
         quitSeen = true
         break
+      if input.recreate or (smoke and frames in [20,40]):
+        freezeMotion()
+        let logical = host.windowSize()
+        let sizeBefore = host.drawableSize()
+        var reference: seq[uint8]
+        if smoke or desktopTest:
+          # Persistent owner edits and changed camera/post state must survive too.
+          ground.updateTerritory(7,5,3,5,newSeqWithOwner(15,uint8(1+recreations mod 3)))
+          angle += 0.15
+          drawScene(sizeBefore)
+          reference.setLen(sizeBefore.width*sizeBefore.height*4)
+          readPixels(0,0,int32(sizeBefore.width),int32(sizeBefore.height),0x1908,0x1401,addr reference[0])
+          doAssert getError() == 0
+        var retiredGround = ground
+        var retiredPipeline = pipeline
+        let retiredHost = host
+        let retiredScopes = scopes
+        disposeGraphics()
+        retiredScopes.invalidate()
+        host.close()
+        host = openWindow(version,logical.width,logical.height)
+        createGraphics() # re-resolve every entry point for the new current context
+        inc recreations
+        if smoke or desktopTest:
+          let restoredSize = host.drawableSize()
+          doAssert restoredSize == sizeBefore
+          drawScene(restoredSize)
+          var restored = newSeq[uint8](reference.len)
+          readPixels(0,0,int32(restoredSize.width),int32(restoredSize.height),0x1908,0x1401,addr restored[0])
+          doAssert getError() == 0 and restored == reference, "Recreation changed scene pixels"
+          var rejected = false
+          try: retiredGround.render(1,1)
+          except ValueError: rejected = true
+          doAssert rejected
+          rejected = false
+          try: discard retiredPipeline.beginFrame(1,1)
+          except ValueError: rejected = true
+          doAssert rejected
+          rejected = false
+          try: discard retiredHost.drawableSize()
+          except ValueError: rejected = true
+          doAssert rejected
+          rejected = false
+          try: retiredScopes.requireContext()
+          except ValueError: rejected = true
+          doAssert rejected
+          echo "RECREATE PASS: generation=",recreations," pixels=",reference.len div 4
+          stdout.flushFile()
+        last = seconds() # creation time must not enter the simulation clock
+        paused = true
       let now = seconds()
       let delta = max(0.0,now-last)
       last = now
@@ -84,15 +165,7 @@ proc run(version: int; smoke, desktopTest: bool) =
           carSnapshot(phase,current)
         interpolateInstances(previous,current,plan.alpha,rendered)
         renderedPhase = previousPhase+(phase-previousPhase)*float32(plan.alpha)
-        cars.updateInstancesIfChanged(rendered)
-        if pipeline.beginFrame(size.width,size.height):
-          try:
-            let target = pipeline.renderSize()
-            let matrix = arenaCamera(angle,distance).viewProjection(float32(size.width)/float32(size.height))
-            ground.render(target.width,target.height,matrix,clear=false)
-            cars.renderInstances(target.width,target.height,matrix,clear=false)
-            pipeline.endFrame()
-          finally: pipeline.cancelFrame()
+        drawScene(size)
         if smoke or desktopTest:
           doAssert getError() == 0
           if oldWidth != size.width:
@@ -112,7 +185,7 @@ proc run(version: int; smoke, desktopTest: bool) =
         echo "HOST presents=",presented," skips=",skipped," ticks=",ticks,
           " paused=",ord(paused)," focused=",ord(focused)," minimized=",ord(minimized),
           " width=",size.width," height=",size.height," angle=",angle,
-          " distance=",distance," phase=",renderedPhase
+          " distance=",distance," phase=",renderedPhase," recreations=",recreations
         stdout.flushFile()
         reported = now
       if desktopTest and now-started > 60:
@@ -124,14 +197,12 @@ proc run(version: int; smoke, desktopTest: bool) =
       echo "DESKTOP PASS: real window quit consumed"
       stdout.flushFile()
     if smoke:
-      doAssert quitSeen and presented > 20 and skipped >= 2 and resizes > 5
+      doAssert quitSeen and presented > 20 and skipped >= 2 and resizes > 5 and recreations == 2
       echo "WINDOW PASS: presents=",presented," hidden-skips=",skipped," drawable-resizes=",resizes," quit=",quitSeen
   finally:
     # GPU allocations must be deleted with their original window/context current.
     try:
-      pipeline.dispose()
-      cars.dispose()
-      ground.dispose()
+      disposeGraphics()
     finally:
       host.close()
       host.close()

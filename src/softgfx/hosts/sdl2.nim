@@ -20,6 +20,7 @@ proc SDL_GL_SwapWindow(window: pointer) {.importc.}
 proc SDL_GL_GetProcAddress*(name: cstring): pointer {.importc.}
 proc SDL_GetWindowFlags(window: pointer): uint32 {.importc.}
 proc SDL_SetWindowSize(window: pointer; w,h: cint) {.importc.}
+proc SDL_GetWindowSize(window: pointer; w,h: ptr cint) {.importc.}
 proc SDL_HideWindow(window: pointer) {.importc.}
 proc SDL_ShowWindow(window: pointer) {.importc.}
 proc SDL_PollEvent(event: pointer): cint {.importc.}
@@ -35,7 +36,7 @@ type
     window, context: pointer
     alive: bool
   WindowInput* = object
-    quit*: bool
+    quit*, recreate*: bool
     orbit*, zoom*: int
 
 proc failure(action: string): ref IOError =
@@ -60,7 +61,7 @@ proc openWindow*(version = 3; width = 800; height = 600): SdlWindow =
     for setting in [(21,4),(17,version),(18,0),(5,1),(6,24),(0,8),(1,8),(2,8)]:
       if SDL_GL_SetAttribute(cint(setting[0]),cint(setting[1])) != 0:
         raise failure("SDL GLES attribute")
-    result.window = SDL_CreateWindow("Nim GLES - arrows orbit, W/S zoom, Esc quit",
+    result.window = SDL_CreateWindow("Nim GLES - arrows orbit, W/S zoom, R recreate, Esc quit",
       0x2FFF0000,0x2FFF0000,cint(width),cint(height),0x00000002'u32 or 0x20 or 0x2000)
     if result.window == nil: raise failure("SDL window creation")
     result.context = SDL_GL_CreateContext(result.window)
@@ -78,6 +79,11 @@ proc openWindow*(version = 3; width = 800; height = 600): SdlWindow =
     result.alive = false
     SDL_QuitSubSystem(0x20)
     raise
+proc windowSize*(host: SdlWindow): tuple[width,height:int] =
+  host.requireWindow()
+  var w,h: cint
+  SDL_GetWindowSize(host.window,addr w,addr h)
+  (int(w),int(h))
 proc drawableSize*(host: SdlWindow): tuple[width,height:int] =
   host.requireWindow()
   var w,h: cint
@@ -116,6 +122,10 @@ proc poll*(host: SdlWindow): WindowInput =
     # Preserve short Escape presses even if key-up is also queued before polling.
     if kind == 0x300 and cast[ptr UncheckedArray[int32]](addr event[0])[5] == 27:
       result.quit = true
+    if kind == 0x300 and cast[ptr UncheckedArray[int32]](addr event[0])[5] == 114 and
+        cast[ptr UncheckedArray[uint8]](addr event[0])[13] == 0:
+      result.recreate = true # R keydown; ignore autorepeat
+  if not host.focused(): result.recreate = false
   var count: cint
   let keys = SDL_GetKeyboardState(addr count)
   if host.focused() and keys != nil and count > 80:
