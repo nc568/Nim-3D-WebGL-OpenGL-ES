@@ -6,6 +6,8 @@ import softgfx/recovery/gles as resetGl
 import softgfx/timing/gles as gpuClock
 import scene
 
+type RobustUnavailableError = object of CatchableError
+
 proc run(version: int; smoke, desktopTest, robust, profiling, resetStorm: bool) =
   var host = openWindow(version,if smoke or desktopTest: 320 else: 800,if smoke or desktopTest: 240 else: 600,robust=robust)
   var ground, cars: Renderer
@@ -50,7 +52,8 @@ proc run(version: int; smoke, desktopTest, robust, profiling, resetStorm: bool) 
     probe = resetGl.resetProbe(SDL_GL_GetProcAddress)
     monitor = initResetMonitor(probe.check,scopes)
     if robust and (not monitor.supported or not probe.robustAccess or probe.notificationStrategy != 0x8252'u32):
-      raise newException(IOError,"Robust context lacks reset notification support")
+      raise newException(RobustUnavailableError,"Actual GLES robustness unavailable: source=" & probe.source &
+        " access=" & $probe.robustAccess & " strategy=" & $probe.notificationStrategy)
     profile = initFrameProfile()
     swapProfile = initFrameProfile()
     seenInvalidations = 0
@@ -325,5 +328,16 @@ let robust = "--robust" in commandLineParams()
 let profileRequested = "--profile" in commandLineParams()
 let resetStorm = "--reset-storm" in commandLineParams()
 if resetStorm and not smoke: raise newException(ValueError,"--reset-storm requires --smoke")
-run(version,smoke,desktopTest,robust,profileRequested,resetStorm)
-if smoke: run(version,true,false,robust,profileRequested,resetStorm) # SDL/window/context recreation, not only resource recreation
+try:
+  run(version,smoke,desktopTest,robust,profileRequested,resetStorm)
+  if smoke: run(version,true,false,robust,profileRequested,resetStorm)
+except RobustUnavailableError as error:
+  # Never silently downgrade a requested robust context. Exit 77 is a capability
+  # rejection, explicitly recorded by CI, not a successful robust-context test.
+  var unavailable = newJObject()
+  unavailable["schemaVersion"] = %1
+  unavailable["requestedApi"] = %version
+  unavailable["status"] = %"unavailable"
+  unavailable["reason"] = %error.msg
+  echo "ROBUST_UNAVAILABLE ",$unavailable
+  quit(77)

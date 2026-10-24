@@ -62,7 +62,12 @@ Test modes включают profiling автоматически, но тест�
 ## CI и границы
 
 Оконная матрица GCC/LLVM/cproc-QBE × GLES2/GLES3 включает обычный smoke, desktop
-Openbox/XTest (R и L), strict robust smoke и negative reset storm. JSON schema,
+Openbox/XTest (R и L), strict robust capability probe и negative reset storm.
+Если actual GL state не предоставляет robustness/reset notification, приложение
+возвращает 77 с ROBUST_UNAVAILABLE, без fallback. CI отдельно записывает эту
+capability rejection; это НЕ успешный запуск robust recovery. Если поддержка есть,
+обязателен полный robust smoke. Непредвиденные ошибки context creation всё ещё
+проваливают matrix. JSON schema,
 notification strategy robust context и recovery counts проверяет collector;
 `build/native-report.json` сохраняется в native-evidence вместе с логами.
 Старые JS/WebGL/native/ARM64 cross-link checks сохранены.
