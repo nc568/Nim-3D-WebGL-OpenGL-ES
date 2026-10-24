@@ -166,3 +166,11 @@ Optional `softgfx/identity` выравнивает previous history по current
 motion interpolation. Spawn/reset snap, despawn immediate; host владеет lifetime
 и запрещает случайное переиспользование ID. Scratch allocation вынесена из
 snapshot update, GPU ownership не меняется. См. validation-identity.md.
+
+## Уточнение после тринадцатого среза
+
+Optional uniform grid кэширует transformed bounds и отсеивает cell unions перед
+individual plane tests. Region лишь задаёт buckets, не ограничивает допустимые
+позиции. Host явно rebuild-ит при смене snapshot. Flat API остаётся oracle и
+простым путём для малых сцен; query сохраняет стабильный порядок за O(N) scan.
+См. validation-grid.md; аппаратные performance claims не добавлены.

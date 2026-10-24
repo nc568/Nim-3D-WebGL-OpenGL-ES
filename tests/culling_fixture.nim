@@ -8,6 +8,9 @@ proc runCullingProbe*(ctx: Context; caps: Capabilities; read: FrameReader) =
   let bounds = mesh.meshBounds()
   var poses = newSeq[Instance](41)
   var indices = newSeq[int](poses.len)
+  var grid = initSpatialGrid(Bounds(lower:[-8.0,-2.0,-2.0],upper:[8.0,2.0,2.0]),[8,2,2],poses.len)
+  var gridIndices = newSeq[int](poses.len)
+  var gridStats: GridQueryStats
   for fallback in [false,true]:
     var all = initRenderer(ctx,caps,mesh,instanceCapacity=poses.len,forceFallback=fallback)
     var selected = initRenderer(ctx,caps,mesh,instanceCapacity=poses.len,forceFallback=fallback)
@@ -20,11 +23,14 @@ proc runCullingProbe*(ctx: Context; caps: Capabilities; read: FrameReader) =
         matrix = Camera(eye:[2'f32,2,4],target:[0'f32,0,0],up:[0'f32,1,0],
           fovY:0.8,nearPlane:0.1,farPlane:20).viewProjection(1)
       let count = frustum(matrix).collectVisible(bounds,poses,indices)
+      grid.rebuild(bounds,poses)
+      doAssert frustum(matrix).collectVisible(grid,gridIndices,gridStats) == count
+      for i in 0..<count: doAssert gridIndices[i] == indices[i]
       doAssert count > 0 and count < poses.len
       all.updateInstances(poses)
       all.renderInstances(64,64,matrix)
       let reference = read()
-      selected.updateVisibleInstances(poses,indices,count)
+      selected.updateVisibleInstances(poses,gridIndices,count)
       selected.renderInstances(64,64,matrix)
       doAssert read() == reference, "Frustum culling changed visible pixels"
       doAssert selected.stats.instances == count

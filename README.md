@@ -294,3 +294,10 @@ float32 snapshot и пропускают одинаковые submissions. Ст�
 объект. Scratch переиспользуется; вызывайте при новом simulation snapshot, затем
 обычный `interpolateInstances` на каждом кадре. Контракт, стоимость и ограничения:
 [identity alignment](docs/validation-identity.md).
+
+## Spatial grid для culling
+
+`softgfx/culling`: `initSpatialGrid` → `rebuild` → `collectVisible` сохраняет
+порядок индексов и отсеивает группы conservative AABBs. Полезно для больших
+статических/редко меняющихся batches; query всё ещё сканирует marks для стабильного
+порядка. Стоимость, инвалидация cache и тесты: [uniform grid](docs/validation-grid.md).

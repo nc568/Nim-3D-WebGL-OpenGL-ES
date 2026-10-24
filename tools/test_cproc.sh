@@ -4,7 +4,7 @@
 set -eu
 NIM_CPROC=${NIM_CPROC:-nim-cproc}
 mkdir -p build
-for suite in test_core test_math3d test_resources test_instances test_post test_timing test_autoscale test_environment test_culling test_motion test_dirty test_identity; do
+for suite in test_core test_math3d test_resources test_instances test_post test_timing test_autoscale test_environment test_culling test_motion test_dirty test_identity test_grid; do
   "$NIM_CPROC" c -r -d:nimCproc --threads:off --mm:arc --cc:gcc \
     --gcc.exe:"$PWD/tools/cproc_cc.py" --gcc.linkerexe:"$PWD/tools/cproc_cc.py" \
     --nimcache:"build/cache-cproc-$suite" -o:"build/${suite}_cproc" "tests/$suite.nim"

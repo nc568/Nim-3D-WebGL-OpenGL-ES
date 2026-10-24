@@ -106,3 +106,5 @@ proc collectVisible*(f: Frustum; local: Bounds; items: openArray[Instance];
     if f.intersects(world):
       indices[result] = i
       inc result
+
+include spatial_grid
