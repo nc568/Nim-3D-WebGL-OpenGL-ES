@@ -45,6 +45,7 @@ const puppeteer=require('puppeteer-core');
   await page.waitForFunction(()=>document.getElementById('status').textContent==='lost');
   report=await page.evaluate(()=>softgfxTiming());
   if(report.autoActive||report.gpuSamples)throw Error('Auto survived lost GPU as active');
+  if(!report.contextLost || report.instanceMode!==null)throw Error('Lost-context diagnostics accessed a retired renderer');
   await page.evaluate(()=>{globalThis.syntheticNs=16000000;loss.restoreContext()});
   await page.waitForFunction(()=>document.getElementById('status').textContent==='webgl2');
   await page.waitForFunction(()=>softgfxTiming().frames>=35);

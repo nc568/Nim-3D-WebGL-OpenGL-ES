@@ -71,6 +71,7 @@ proc resetMeasurements(settling = false) =
   profile = initFrameProfile()
   scaler.reset(post.scale,settling)
   seenInvalidations = timer.invalidations
+var lost = false
 proc timingReport(): JsObject =
   let report = profile.report()
   result = newJsObject()
@@ -118,7 +119,9 @@ proc timingReport(): JsObject =
   result.animated = running
   result.fxaa = post.fxaa
   result.postEnabled = post.enabled
-  result.instanceMode = cstring($cars.instanceMode)
+  result.contextLost = lost
+  result.instanceMode = nil
+  if not lost: result.instanceMode = cstring($cars.instanceMode)
   result.targetBytes = pipeline.stats.allocatedBytes
 publishTiming(timingReport)
 proc refreshTiming() =
@@ -131,7 +134,6 @@ proc refreshTiming() =
   timingText(cstring(cpu & " · " & gpu & " · frames: " & $report.frames))
 var angle = 0.6
 var distance = 15.0
-var lost = false
 proc drawFrame() =
   if not lost:
     let w = surface.width.to(int)
