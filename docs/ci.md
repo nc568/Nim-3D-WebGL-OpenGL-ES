@@ -24,7 +24,8 @@ Timing values have no performance threshold and do not prove a speedup.
 Push to `main` or `arena/**`, pull requests, and manual workflow dispatch.
 Only `contents: read` is granted to jobs. Checkout does not persist credentials;
 there is no `pull_request_target`, PAT secret, elevated GitHub token, deployment,
-release creation or automatic merge. Actions are pinned to resolved commit SHAs.
+release creation or automatic merge. Actions are pinned to resolved commit SHAs with Node 24 runtimes. The test
+application separately uses Node 22.
 Dependencies/toolchain sources remain at the repository's documented pins.
 
 A workflow_dispatch workflow normally needs to exist on the default branch to
@@ -62,7 +63,16 @@ cannot hide failures. Native commands save individual logs and preserve exit cod
 
 ## Initial rollout
 
-Local `tools/ci_native.sh` passed before publication. Remote rollout status and
-run link will be recorded after attempting the push; repository metadata access
-does not by itself establish workflow-write permissions. Administrative Actions
-settings were not changed (the integration returned 403 for reading that endpoint).
+Local `tools/ci_native.sh` passed before publication. The first remote cold run
+[40086402136](https://github.com/nc568/Nim-3D-WebGL-OpenGL-ES/actions/runs/40086402136)
+on code commit `39ff34c86a8a350076403a00616dcaa087034cc8` **passed both jobs**:
+native 7m24s, browser 10m17s. Artifacts `native-evidence` and `browser-evidence`
+were uploaded successfully. The run warned that the original Actions v4 Node 20
+runtimes were deprecated; action pins were then upgraded to current Node 24
+versions for subsequent runs. See the branch Actions page for the latest run.
+
+Push and Actions run/artifact metadata reads worked through the existing Arena
+integration; the token disclosed in chat was not used or saved. Administrative
+Actions settings were not changed (the integration returned 403 for reading that
+endpoint). No additional permissions were needed for the tested push/read path.
+Main has not been modified or merged.
