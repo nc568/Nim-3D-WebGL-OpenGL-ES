@@ -18,6 +18,7 @@ run build/ci-window-llvm-build.log "$NIM" c --cc:clang --clang.exe:"$CLANG" --cl
 run build/ci-window-qbe-build.log "$PWD/build/toolchains/Nim/bin/nim-cproc" c -d:nimCproc --threads:off --mm:arc --cc:gcc --gcc.exe:"$PWD/tools/cproc_cc.py" --gcc.linkerexe:"$PWD/tools/cproc_cc.py" --nimcache:build/cache-window-qbe -o:build/window_qbe examples/native_window.nim
 for compiler in gcc llvm qbe; do
   for api in gles2 gles3; do
+    if [ "$api" = gles2 ]; then export MESA_GLES_VERSION_OVERRIDE=2.0; else export MESA_GLES_VERSION_OVERRIDE=3.0; fi
     run "build/ci-window-$compiler-$api.log" timeout 60 xvfb-run -a -s '-screen 0 1024x768x24' "build/window_$compiler" --smoke "--$api"
   done
 done

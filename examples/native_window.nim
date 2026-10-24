@@ -18,6 +18,8 @@ proc run(version: int; smoke: bool) =
     echo "SDL window GLES",version," driver: ",$getString(0x1F02)," / ",$getString(0x1F01)
     if not ($getString(0x1F02)).startsWith("OpenGL ES"):
       raise newException(IOError,"Desktop GL is not the GLES test target")
+    if smoke and not ($getString(0x1F02)).startsWith("OpenGL ES " & $version & "."):
+      raise newException(IOError,"Smoke test requires the requested ES major version, not a newer context")
     ground = initRenderer(gl,caps,arenaMesh(version == 2,includeCars=false),arenaOwners())
     cars = initRenderer(gl,caps,carMesh(version == 2),instanceCapacity=3)
     pipeline = initPipeline(gl,caps,scopes=newContextScopes())
@@ -100,6 +102,11 @@ proc run(version: int; smoke: bool) =
     finally:
       host.close()
       host.close()
+      if smoke:
+        var rejected = false
+        try: discard host.drawableSize()
+        except ValueError: rejected = true
+        doAssert rejected # closed host never reaches SDL again
 
 let smoke = "--smoke" in commandLineParams()
 let version = if "--gles2" in commandLineParams(): 2 else: 3

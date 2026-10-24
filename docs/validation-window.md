@@ -31,10 +31,13 @@ CPU snapshots автомобилей обновляются 20 Hz, bounded clock
 использует и уничтожает окно/контекст **дважды**. Проверяются:
 
 - ES profile/version (не desktop GL), реальное SDL окно и swap path;
+  CI задаёт MESA_GLES_VERSION_OVERRIDE=2.0/3.0 и smoke требует соответствующий
+  major version, а не просто minimum ES version;
 - seeded последовательность resize и изменение drawable dimensions;
 - hide/show с пропуском render; получение SDL_QUIT через event queue;
 - небланковый framebuffer и отсутствие GL errors;
-- cleanup renderer/pipeline до SDL GL context teardown, повторный close.
+- cleanup renderer/pipeline до SDL GL context teardown, повторный close
+  и rejection обращения к уже закрытому host до SDL call.
 
 Логи ci-window-* содержат driver/version и presents/skips/resizes. Каждый процесс
 ограничен timeout 60 s. Существующая JS/browser/UI и native pbuffer matrix остаётся.
