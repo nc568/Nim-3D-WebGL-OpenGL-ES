@@ -17,7 +17,11 @@ reset между двумя GL calls: мгновенное/asynchronous обна
 
 `--robust` явно запрашивает SDL robust-access + lose-context-on-reset context. Запрос
 не ослабляется молча: неподдерживаемая конфигурация завершает запуск с ошибкой.
-Без флага обычный режим остаётся доступен, но наличие status API при strategy
+В CI strict robust проверяется через SDL GLX ES-profile path (FORCE_EGL=0):
+SDL2 EGL path не переносит reset-notification setting корректно в выбранной версии.
+Обычная матрица остаётся на EGL. Проверяются реальные GL_CONTEXT_ROBUST_ACCESS и
+GL_RESET_NOTIFICATION_STRATEGY, не cached SDL attributes. Desktop GL вместо GLES
+по-прежнему отвергается. Без флага обычный режим остаётся доступен, но наличие status API при strategy
 NO_RESET_NOTIFICATION не гарантирует уведомления о hardware reset.
 
 После наблюдаемого loss demo использует Renderer/Pipeline/GpuTimer.abandon, не

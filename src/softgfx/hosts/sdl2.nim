@@ -72,11 +72,7 @@ proc openWindow*(version = 3; width = 800; height = 600; robust = false): SdlWin
     if SDL_GL_GetAttribute(21,addr profile) != 0 or SDL_GL_GetAttribute(17,addr major) != 0 or
         profile != 4 or major < cint(version):
       raise newException(IOError,"SDL did not provide the requested GLES profile")
-    if robust:
-      var flags, notification: cint
-      if SDL_GL_GetAttribute(20,addr flags) != 0 or SDL_GL_GetAttribute(25,addr notification) != 0 or
-          (flags and 4) == 0 or notification != 1:
-        raise newException(IOError,"Requested robust/reset-notifying context was not provided")
+    # SDL caches several context attributes; validate actual robustness via GL.
     discard SDL_GL_SetSwapInterval(1) # driver may not support vsync
   except:
     if result.context != nil: SDL_GL_DeleteContext(result.context)

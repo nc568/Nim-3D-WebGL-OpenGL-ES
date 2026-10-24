@@ -49,7 +49,7 @@ proc run(version: int; smoke, desktopTest, robust, profiling, resetStorm: bool) 
     scopes = newContextScopes()
     probe = resetGl.resetProbe(SDL_GL_GetProcAddress)
     monitor = initResetMonitor(probe.check,scopes)
-    if robust and (not monitor.supported or probe.notificationStrategy != 0x8252'u32):
+    if robust and (not monitor.supported or not probe.robustAccess or probe.notificationStrategy != 0x8252'u32):
       raise newException(IOError,"Robust context lacks reset notification support")
     profile = initFrameProfile()
     swapProfile = initFrameProfile()
@@ -287,6 +287,7 @@ proc run(version: int; smoke, desktopTest, robust, profiling, resetStorm: bool) 
       report["testMode"] = %(smoke or desktopTest)
       report["robustRequested"] = %robust
       report["resetSource"] = %probe.source
+      report["robustAccess"] = %probe.robustAccess
       report["resetNotificationStrategy"] = %int(probe.notificationStrategy)
       report["gpuTimerSupported"] = %timer.supported
       report["recreations"] = %recreations

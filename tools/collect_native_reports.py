@@ -19,7 +19,7 @@ for compiler in ('gcc', 'llvm', 'qbe'):
                     assert report['recreations'] == 3 and report['injectedLosses'] == 1
                     assert report['cpuSubmit']['samples'] > 0
                 if variant == 'robust-':
-                    assert report['robustRequested'] and report['resetSource'] != 'unavailable'
+                    assert report['robustRequested'] and report['robustAccess'] and report['resetSource'] != 'unavailable'
                     assert report['resetNotificationStrategy'] == 0x8252
                 for name in ('cpuSubmit', 'gpuElapsed', 'swapWait'):
                     stats = report[name]

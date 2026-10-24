@@ -57,9 +57,11 @@ when not defined(js):
   proc mockString(name:uint32): cstring {.cdecl.} =
     if name == 0x1F03: extensions else: apiVersion
   proc mockInteger(name:uint32; value:ptr int32) {.cdecl.} =
-    doAssert name == 0x8256
-    inc strategyReads
-    value[] = 0x8252
+    doAssert name in [0x8256'u32,0x90F3'u32]
+    if name == 0x8256:
+      inc strategyReads
+      value[] = 0x8252
+    else: value[] = 1
   proc mockStatus(): uint32 {.cdecl.} =
     inc statusCalls
     0
@@ -72,7 +74,7 @@ when not defined(js):
       cast[pointer](mockStatus)
     else: nil
   var probe = resetGl.resetProbe(mockResolver)
-  doAssert probe.source == "GL_EXT_robustness" and probe.notificationStrategy == 0x8252
+  doAssert probe.source == "GL_EXT_robustness" and probe.notificationStrategy == 0x8252 and probe.robustAccess
   doAssert statusCalls == 0 and strategyReads == 1
   doAssert probe.check() == 0 and statusCalls == 1
   extensions = "prefixGL_KHR_robustness GL_EXT_robustness_suffix"

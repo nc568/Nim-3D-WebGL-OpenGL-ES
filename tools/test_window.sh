@@ -21,7 +21,7 @@ for compiler in gcc llvm qbe; do
     if [ "$api" = gles2 ]; then export MESA_GLES_VERSION_OVERRIDE=2.0; else export MESA_GLES_VERSION_OVERRIDE=3.0; fi
     run "build/ci-window-$compiler-$api.log" timeout 60 xvfb-run -a -s '-screen 0 1024x768x24' "build/window_$compiler" --smoke "--$api"
     run "build/ci-window-desktop-$compiler-$api.log" timeout 90 xvfb-run -a -s '-screen 0 1024x768x24' python3 tools/desktop_test.py "build/window_$compiler" "$api"
-    run "build/ci-window-robust-$compiler-$api.log" timeout 60 xvfb-run -a -s '-screen 0 1024x768x24' "build/window_$compiler" --smoke --robust "--$api"
+    run "build/ci-window-robust-$compiler-$api.log" env SDL_VIDEO_X11_FORCE_EGL=0 timeout 60 xvfb-run -a -s '-screen 0 1024x768x24' "build/window_$compiler" --smoke --robust "--$api"
     run "build/ci-window-storm-$compiler-$api.log" timeout 60 xvfb-run -a -s '-screen 0 1024x768x24' python3 tools/test_reset_storm.py "build/window_$compiler" "$api"
   done
 done

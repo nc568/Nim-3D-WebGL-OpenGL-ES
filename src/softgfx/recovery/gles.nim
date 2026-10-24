@@ -5,6 +5,7 @@ import ../backends/gles
 
 type ResetProbe* = object
   check*: ResetCheck
+  robustAccess*: bool
   source*: string
   notificationStrategy*: uint32 # 0=unknown; GL_LOSE_CONTEXT_ON_RESET=0x8252
 
@@ -36,4 +37,7 @@ proc resetProbe*(resolve: Resolver): ResetProbe =
   var strategy: int32
   getInteger(0x8256,addr strategy)
   result.notificationStrategy = cast[uint32](strategy)
+  var access: int32
+  getInteger(0x90F3,addr access)
+  result.robustAccess = access != 0
   result.check = proc(): uint32 = status()
