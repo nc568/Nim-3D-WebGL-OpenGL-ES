@@ -320,3 +320,11 @@ state и stats. `dispose` через любой alias инвалидирует �
 frames/queries разных owners до driver calls; frame и его GPU measurement совместимы.
 После context loss нужен новый guard. Nil сохраняет прежний режим без arbitration.
 [Контракт, тесты и ограничения](docs/validation-scopes.md).
+
+## Native SDL2 window (Linux)
+
+`examples/native_window.nim` запускает сцену в SDL2 GLES2/3 окне: resize,
+drawable-size rendering, 20 Hz interpolation, стрелки/W/S, Escape/close.
+`tools/test_window.sh` проверяет GCC/LLVM/cproc-QBE оконный путь под Xvfb/Mesa,
+отдельно от EGL pbuffer. Это software-window validation, **не hardware FPS**.
+[Запуск, зависимости и границы](docs/validation-window.md).

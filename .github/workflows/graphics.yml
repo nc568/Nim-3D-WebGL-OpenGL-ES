@@ -107,6 +107,23 @@ jobs:
           done
       - name: Native debug, release and ARM64 cross-link
         run: ./tools/ci_native.sh
+      - name: SDL window dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libsdl2-2.0-0 libegl1-mesa-dev libgles2-mesa-dev libgl1-mesa-dri xvfb xauth
+      - name: SDL GLES windows (GCC, LLVM, QBE)
+        run: ./tools/test_window.sh
+      - name: Native failure diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          python3 - <<'PYDIAG'
+          from pathlib import Path
+          for path in sorted(Path('build').glob('ci-window-*.log')):
+              text = '\n'.join(path.read_text(errors='replace').splitlines()[-30:])[-7000:]
+              text = text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+              print(f'::error title={path.name}::{text}')
+          PYDIAG
       - name: Native evidence (including failures)
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node 24

@@ -195,3 +195,10 @@ Explicit ContextScopes добавляет независимые frame/query cha
 Это opt-in host-managed guard, не глобальное обнаружение GL context или защита raw
 backend calls. Demo подключён и заменяет guard при restore. Подробнее:
 validation-scopes.md.
+
+## Уточнение после семнадцатого среза
+
+Linux SDL2 host отделён от renderer: window/event/drawable/swap lifecycle, bounded
+simulation и teardown до уничтожения context. CI получает Xvfb/Mesa window path
+для GCC/LLVM/QBE GLES2/3; физический GPU/монитор/mobile не подменяются виртуальным
+X server. См. validation-window.md.
