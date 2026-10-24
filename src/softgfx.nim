@@ -1,0 +1,164 @@
+import softgfx/[types, shaders, math3d, territory, instances, pipeline, environment]
+export types, math3d, territory, instances, pipeline, environment
+when defined(js):
+  import softgfx/backends/web as backend
+else:
+  import softgfx/backends/gles as backend
+export backend.Context
+
+type Renderer* = object
+  context: Context
+  program: backend.Program
+  buffer, indices: backend.Buffer
+  territoryBinding: backend.TerritoryBinding
+  owners: OwnerMap
+  indexed: bool
+  effectBinding: backend.EffectBinding
+  matrixBinding: backend.MatrixBinding
+  stream: backend.InstanceStream
+  instanceData: seq[float32]
+  instanceCount, instanceCapacity: int
+  count: int
+  alive, background: bool
+  caps*: Capabilities
+  stats*: FrameStats
+
+proc initRenderer*(context: Context; caps: Capabilities; mesh: MeshData; owners: OwnerMap = nil; instanceCapacity = 0; forceFallback = false; unlit = false; background = false): Renderer =
+  mesh.validate()
+  if background and instanceCapacity != 0:
+    raise newException(ValueError,"Background shader does not support instances")
+  if instanceCapacity < 0 or instanceCapacity > MaxInstances:
+    raise newException(ValueError, "Invalid instance capacity")
+  result.context = context
+  result.caps = caps
+  result.owners = if owners.isNil: newOwnerMap(1,1) else: owners
+  result.background = background
+  result.program = backend.createProgram(context,
+    (if background: skyVertexSource(caps.api) else: vertexSource(caps.api)),
+    (if background: skyFragmentSource(caps.api) else: fragmentSource(caps.api,unlit)))
+  try:
+    result.territoryBinding = backend.createTerritory(context, result.program, caps.api in {webgl2,gles3}, result.owners)
+    result.buffer = backend.createBuffer(context, mesh.packed())
+    result.indices = backend.createIndices(context, mesh.indices)
+    result.effectBinding = backend.effectBinding(context,result.program)
+    result.matrixBinding = backend.matrixBinding(context, result.program)
+    result.indexed = mesh.indices.len > 0
+    result.count = if result.indexed: mesh.indices.len else: mesh.vertices.len
+    result.stats.bufferBytes = mesh.vertices.len * 48 + mesh.indices.len * 2
+    result.stats.textureBytes = result.owners.width * result.owners.height + 1024
+    if instanceCapacity > 0:
+      result.stream = backend.createInstanceStream(context,caps.api,instanceCapacity,forceFallback)
+      result.instanceData = newSeq[float32](instanceCapacity*InstanceFloats)
+      result.instanceCapacity = instanceCapacity
+      if result.stream.mode != fallbackDraws:
+        result.stats.bufferBytes += instanceCapacity*InstanceBytes
+    result.alive = true
+  except:
+    backend.destroyInstanceStream(context,result.stream)
+    backend.destroyIndices(context,result.indices)
+    backend.destroyTerritory(context,result.territoryBinding)
+    backend.destroy(context,result.program,result.buffer)
+    raise
+
+proc countBytes(counter: var int; amount: int) {.inline.} =
+  # Counters must not crash long-running sessions (Nim JS int is checked int32).
+  if amount > high(int)-counter: counter = high(int)
+  else: counter += amount
+
+proc updateTerritory*(r: var Renderer; x,y,w,h: int; data: seq[uint8]) =
+  ## Tight byte rows. CPU shadow is retained for context recreation.
+  if not r.alive: raise newException(ValueError, "Renderer is disposed")
+  r.owners.checkDelta(x,y,w,h,data)
+  backend.uploadDelta(r.context,r.territoryBinding,x,y,w,h,data)
+  r.owners.applyDelta(x,y,w,h,data)
+  countBytes(r.stats.deltaUploads,1)
+  countBytes(r.stats.deltaBytes,data.len)
+
+proc instanceMode*(r: Renderer): InstanceMode = r.stream.mode
+
+proc updateInstances*(r: var Renderer; items: openArray[Instance]) =
+  if not r.alive: raise newException(ValueError, "Renderer is disposed")
+  if r.instanceCapacity == 0: raise newException(ValueError, "Renderer has no instance capacity")
+  if items.len > 0 and r.count > high(int) div items.len:
+    raise newException(ValueError, "Submitted vertex statistics exceed host integer range")
+  packInstances(items,r.instanceData)
+  backend.uploadInstances(r.context,r.stream,r.instanceData,items.len)
+  r.instanceCount = items.len
+  countBytes(r.stats.instanceUpdates,1)
+  if r.stream.mode != fallbackDraws:
+    countBytes(r.stats.instanceUploadBytes,items.len*InstanceBytes)
+
+proc frameReady(r: var Renderer; width,height: int; viewProjection: Mat4): bool =
+  if not r.alive: raise newException(ValueError, "Renderer is disposed")
+  r.stats.drawCalls = 0
+  r.stats.vertices = 0
+  r.stats.instances = 0
+  if width <= 0 or height <= 0: return false
+  if width > high(int32).int or height > high(int32).int:
+    raise newException(ValueError, "Surface exceeds GLsizei")
+  for value in viewProjection:
+    if not finite(value): raise newException(ValueError, "Non-finite view-projection matrix")
+  true
+
+proc render*(r: var Renderer; width, height: int; viewProjection = identity(); clear = true) =
+  ## clear=false composes another opaque batch into the current color/depth target.
+  if r.background: raise newException(ValueError,"Use renderBackground for a sky renderer")
+  if not r.frameReady(width,height,viewProjection): return
+  backend.draw(r.context, r.program, r.buffer, r.count, width, height, r.matrixBinding,
+    viewProjection, r.indices, r.indexed, r.territoryBinding, clear)
+  r.stats.drawCalls = 1
+  r.stats.vertices = r.count
+
+proc renderInstances*(r: var Renderer; width, height: int; viewProjection = identity(); clear = true) =
+  if not r.frameReady(width,height,viewProjection): return
+  if r.instanceCapacity == 0: raise newException(ValueError, "Renderer has no instance capacity")
+  backend.drawInstances(r.context,r.program,r.buffer,r.count,width,height,r.matrixBinding,
+    viewProjection,r.indices,r.indexed,r.territoryBinding,r.stream,r.instanceData,r.instanceCount,clear)
+  r.stats.instances = r.instanceCount
+  r.stats.drawCalls = if r.stream.mode == fallbackDraws: r.instanceCount else: int(r.instanceCount > 0)
+  r.stats.vertices = r.count*r.instanceCount
+
+proc dispose*(r: var Renderer) =
+  ## Explicit lifetime: call while the original context is current. Do not copy Renderer.
+  if r.alive:
+    backend.destroyInstanceStream(r.context,r.stream)
+    r.instanceData.setLen(0)
+    backend.destroyIndices(r.context,r.indices)
+    backend.destroyTerritory(r.context,r.territoryBinding)
+    backend.destroy(r.context, r.program, r.buffer)
+    r.alive = false
+
+
+proc updateEffects*(r: var Renderer; settings: SceneEffects) =
+  if not r.alive: raise newException(ValueError,"Renderer is disposed")
+  if r.background: raise newException(ValueError,"Background shader does not accept scene effects")
+  settings.validate() # reject entire snapshot before mutating any uniform
+  backend.updateEffects(r.context,r.program,r.effectBinding,settings)
+
+proc renderBackground*(r: var Renderer; width,height: int) =
+  ## Clip-space opaque background. Caller clears once first; draw BEFORE scene.
+  ## Depth testing/writes are disabled for this draw, restored by next scene draw.
+  if not r.frameReady(width,height,identity()): return
+  backend.draw(r.context,r.program,r.buffer,r.count,width,height,r.matrixBinding,
+    identity(),r.indices,r.indexed,r.territoryBinding,false,background=true)
+  r.stats.drawCalls = 1
+  r.stats.vertices = r.count
+
+
+proc initSkyRenderer*(context: Context; caps: Capabilities; bottom,top: Vec3): Renderer =
+  ## Minimal clip-space gradient shader; no texture sampling/lighting/blob loop.
+  initRenderer(context,caps,skyMesh(bottom,top),background=true)
+
+proc updateVisibleInstances*(r: var Renderer; items: openArray[Instance];
+                             indices: openArray[int]; count: int) =
+  ## Packs the index prefix directly; no temporary seq[Instance]/slice required.
+  if not r.alive: raise newException(ValueError,"Renderer is disposed")
+  if r.instanceCapacity == 0: raise newException(ValueError,"Renderer has no instance capacity")
+  if count > 0 and r.count > high(int) div count:
+    raise newException(ValueError,"Submitted vertex statistics exceed host integer range")
+  packVisible(items,indices,count,r.instanceData)
+  backend.uploadInstances(r.context,r.stream,r.instanceData,count)
+  r.instanceCount = count
+  countBytes(r.stats.instanceUpdates,1)
+  if r.stream.mode != fallbackDraws:
+    countBytes(r.stats.instanceUploadBytes,count*InstanceBytes)

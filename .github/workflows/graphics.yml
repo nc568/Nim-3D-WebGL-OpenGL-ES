@@ -1,0 +1,103 @@
+name: Graphics validation
+
+on:
+  push:
+    branches: [main, 'arena/**']
+  pull_request:
+  workflow_dispatch:
+
+# No PAT or repository secrets are needed; no pull_request_target execution.
+permissions:
+  contents: read
+
+concurrency:
+  group: graphics-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser:
+    name: Pure JS + Chromium + UI
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: build/toolchains
+          key: graphics-${{ runner.os }}-${{ runner.arch }}-browser-v1-${{ hashFiles('tools/bootstrap.sh', 'patches/*.patch') }}
+      - name: Bootstrap pinned Nim and fossil UI
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          ./tools/bootstrap.sh nim 2>&1 | tee build/ci-bootstrap-nim.log
+          ./tools/bootstrap.sh ui 2>&1 | tee build/ci-bootstrap-ui.log
+          npm ci
+      - name: CPU tests and pure JS builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NIM="$PWD/build/toolchains/Nim/bin/nim"
+          export FOSSIL_SRC="$PWD/build/toolchains/fossil/src"
+          ./tools/test.sh 2>&1 | tee build/ci-js.log
+      - name: Browser GPU, lifecycle, UI, timing and autoscale
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8080 --bind 0.0.0.0 --directory build >build/ci-server.log 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          node tools/wait_http.cjs http://127.0.0.1:8080/gpu-test.html
+          kill -0 "$server"
+          TEST_UI=1 USE_BUNDLED_LIBS=1 node tools/browser_test.cjs 2>&1 | tee build/ci-browser.log
+          USE_BUNDLED_LIBS=1 node tools/autoscale_test.cjs 2>&1 | tee build/ci-autoscale.log
+          USE_BUNDLED_LIBS=1 node tools/timing_test.cjs 2>&1 | tee build/ci-timing.log
+      - name: Browser evidence (including failures)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: browser-evidence
+          retention-days: 14
+          path: |
+            build/ci-*.log
+            build/*.png
+            build/timing-report.json
+
+  native:
+    name: GCC + LLVM + cproc-QBE / GLES2-3
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: build/toolchains
+          key: graphics-${{ runner.os }}-${{ runner.arch }}-native-v1-${{ hashFiles('tools/bootstrap.sh', 'patches/*.patch') }}
+      - name: Bootstrap compilers and ANGLE SwiftShader
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          for component in nim cproc llvm native-driver; do
+            ./tools/bootstrap.sh "$component" 2>&1 | tee "build/ci-bootstrap-$component.log"
+          done
+      - name: Native debug, release and ARM64 cross-link
+        run: ./tools/ci_native.sh
+      - name: Native evidence (including failures)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-evidence
+          retention-days: 14
+          path: build/ci-*.log

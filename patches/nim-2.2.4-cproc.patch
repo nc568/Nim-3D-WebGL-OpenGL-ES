@@ -1,0 +1,187 @@
+diff --git a/compiler/ccgexprs.nim b/compiler/ccgexprs.nim
+index a848928..e7af0a8 100644
+--- a/compiler/ccgexprs.nim
++++ b/compiler/ccgexprs.nim
+@@ -1491,6 +1491,14 @@ proc genNewSeqOfCap(p: BProc; e: PNode; d: var TLoc) =
+                 genTypeInfoV1(p.module, seqtype, e.info), a.rdLoc]))
+     gcUsage(p.config, e)
+ 
++proc portableConst(m: BModule; t: PType): Rope =
++  # Nim passes arrays and some non-var objects through unqualified C pointers.
++  # Until that ABI is const-correct, strict-C builds need writable aggregate storage.
++  if isDefined(m.config, "nimCproc") and t.skipTypes(abstractInst).kind in {tyArray, tyObject}:
++    rope("")
++  else:
++    rope("NIM_CONST ")
++
+ proc rawConstExpr(p: BProc, n: PNode; d: var TLoc) =
+   let t = n.typ
+   discard getTypeDesc(p.module, t) # so that any fields are initialized
+@@ -1499,7 +1507,7 @@ proc rawConstExpr(p: BProc, n: PNode; d: var TLoc) =
+   if id == p.module.labels:
+     # expression not found in the cache:
+     inc(p.module.labels)
+-    var data = "static NIM_CONST $1 $2 = " % [getTypeDesc(p.module, t), d.snippet]
++    var data = "static $3$1 $2 = " % [getTypeDesc(p.module, t), d.snippet, portableConst(p.module,t)]
+     # bug #23627; when generating const object fields, it's likely that
+     # we need to generate type infos for the object, which may be an object with
+     # custom hooks. We need to generate potential consts in the hooks first.
+@@ -2878,8 +2886,8 @@ proc exprComplexConst(p: BProc, n: PNode, d: var TLoc) =
+   if id == p.module.labels:
+     # expression not found in the cache:
+     inc(p.module.labels)
+-    p.module.s[cfsData].addf("static NIM_CONST $1 $2 = ",
+-         [getTypeDesc(p.module, t, dkConst), tmp])
++    p.module.s[cfsData].addf("static $3$1 $2 = ",
++         [getTypeDesc(p.module, t, dkConst), tmp, portableConst(p.module,t)])
+     genBracedInit(p, n, isConst = true, t, p.module.s[cfsData])
+     p.module.s[cfsData].addf(";$n", [])
+ 
+@@ -2911,8 +2919,8 @@ proc genConstHeader(m, q: BModule; p: BProc, sym: PSym) =
+       "\t$1 = ($2*)hcrGetGlobal($3, \"$1\");$n", [sym.loc.snippet,
+       getTypeDesc(m, sym.loc.t, dkVar), getModuleDllPath(q, sym)])
+   else:
+-    let headerDecl = "extern NIM_CONST $1 $2;$n" %
+-        [getTypeDesc(m, sym.loc.t, dkVar), sym.loc.snippet]
++    let headerDecl = "extern $3$1 $2;$n" %
++        [getTypeDesc(m, sym.loc.t, dkVar), sym.loc.snippet, portableConst(m,sym.loc.t)]
+     m.s[cfsData].add(headerDecl)
+     if sfExportc in sym.flags and p.module.g.generatedHeader != nil:
+       p.module.g.generatedHeader.s[cfsData].add(headerDecl)
+@@ -2921,8 +2929,8 @@ proc genConstDefinition(q: BModule; p: BProc; sym: PSym) =
+   # add a suffix for hcr - will later init the global pointer with this data
+   let actualConstName = if q.hcrOn: sym.loc.snippet & "_const" else: sym.loc.snippet
+   var data = newRopeAppender()
+-  data.addf("N_LIB_PRIVATE NIM_CONST $1 $2 = ",
+-           [getTypeDesc(q, sym.typ), actualConstName])
++  data.addf("N_LIB_PRIVATE $3$1 $2 = ",
++           [getTypeDesc(q, sym.typ), actualConstName, portableConst(q,sym.typ)])
+   genBracedInit(q.initProc, sym.astdef, isConst = true, sym.typ, data)
+   data.addf(";$n", [])
+   q.s[cfsData].add data
+diff --git a/compiler/ccgstmts.nim b/compiler/ccgstmts.nim
+index 2cf986c..c5ea582 100644
+--- a/compiler/ccgstmts.nim
++++ b/compiler/ccgstmts.nim
+@@ -956,14 +956,14 @@ proc ifSwitchSplitPoint(p: BProc, n: PNode): int =
+     var stmtBlock = lastSon(branch)
+     if stmtBlock.stmtsContainPragma(wLinearScanEnd):
+       result = i
+-    elif hasSwitchRange notin CC[p.config.cCompiler].props:
++    elif hasSwitchRange notin CC[p.config.cCompiler].props or isDefined(p.config, "nimCproc"):
+       if branch.kind == nkOfBranch and branchHasTooBigRange(branch):
+         result = i
+ 
+ proc genCaseRange(p: BProc, branch: PNode) =
+   for j in 0..<branch.len-1:
+     if branch[j].kind == nkRange:
+-      if hasSwitchRange in CC[p.config.cCompiler].props:
++      if hasSwitchRange in CC[p.config.cCompiler].props and not isDefined(p.config, "nimCproc"):
+         var litA = newRopeAppender()
+         var litB = newRopeAppender()
+         genLiteral(p, branch[j][0], litA)
+diff --git a/compiler/ccgtypes.nim b/compiler/ccgtypes.nim
+index eb1e46c..f2865a3 100644
+--- a/compiler/ccgtypes.nim
++++ b/compiler/ccgtypes.nim
+@@ -1717,7 +1717,11 @@ proc genTypeInfoV2Impl(m: BModule; t, origType: PType, name: Rope; info: TLineIn
+   if objDepth >= 0:
+     let objDisplay = genDisplay(m, t, objDepth)
+     let objDisplayStore = getTempName(m)
+-    m.s[cfsVars].addf("static NIM_CONST $1 $2[$3] = $4;$n", [getTypeDesc(m, getSysType(m.g.graph, unknownLineInfo, tyUInt32), dkVar), objDisplayStore, rope(objDepth+1), objDisplay])
++    # TNimTypeV2.display is a mutable pointer in the runtime ABI. cproc
++    # correctly rejects a pointer-to-const initializer. Keep just this table
++    # writable for the experimental strict-C path; do not erase NIM_CONST globally.
++    let qualifier = if isDefined(m.config, "nimCproc"): "" else: "NIM_CONST "
++    m.s[cfsVars].addf("static $5$1 $2[$3] = $4;$n", [getTypeDesc(m, getSysType(m.g.graph, unknownLineInfo, tyUInt32), dkVar), objDisplayStore, rope(objDepth+1), objDisplay, rope(qualifier)])
+     addf(typeEntry, ", .display = $1", [rope(objDisplayStore)])
+   if isDefined(m.config, "nimTypeNames"):
+     var typeName: Rope
+diff --git a/compiler/cgen.nim b/compiler/cgen.nim
+index 8a68b76..a1b721a 100644
+--- a/compiler/cgen.nim
++++ b/compiler/cgen.nim
+@@ -650,7 +650,9 @@ proc genGlobalVarDecl(p: BProc, n: PNode; td, value: Rope; decl: var Rope) =
+     elif sfImportc in s.flags: decl.add("extern ")
+     elif lfExportLib in s.loc.flags: decl.add("N_LIB_EXPORT_VAR ")
+     else: decl.add("N_LIB_PRIVATE ")
+-    if s.kind == skLet and value != "": decl.add("NIM_CONST ")
++    if s.kind == skLet and value != "" and not
++        (isDefined(p.config, "nimCproc") and s.typ.skipTypes(abstractInst).kind in {tyArray, tyObject}):
++      decl.add("NIM_CONST ")
+     decl.add(td)
+     if p.hcrOn: decl.add("*")
+     if sfRegister in s.flags: decl.add(" register")
+diff --git a/lib/nimbase.h b/lib/nimbase.h
+index ebc919b..9288cac 100644
+--- a/lib/nimbase.h
++++ b/lib/nimbase.h
+@@ -88,7 +88,7 @@ __EMSCRIPTEN__
+ #endif
+ 
+ /* calling convention mess ----------------------------------------------- */
+-#if defined(__GNUC__) || defined(__TINYC__)
++#if defined(__GNUC__) || defined(__TINYC__) || defined(NIM_CPROC)
+   /* these should support C99's inline */
+ #  define N_INLINE(rettype, name) inline rettype name
+ #elif defined(__BORLANDC__) || defined(_MSC_VER)
+@@ -617,4 +617,10 @@ NIM_STATIC_ASSERT(sizeof(NI) == sizeof(void*) && NIM_INTBITS == sizeof(NI)*8, "P
+ #define NIM_NOALIAS __restrict
+ /* __restrict is said to work for all the C(++) compilers out there that we support */
+ 
++/* Experimental cproc path: compiler-emitted copies use the libc const ABI. */
++#ifdef NIM_CPROC
++#  include <string.h>
++#  define nimCopyMem memcpy
++#endif
++
+ #endif /* NIMBASE_H */
+diff --git a/lib/pure/hashes.nim b/lib/pure/hashes.nim
+index c017123..95ffdd8 100644
+--- a/lib/pure/hashes.nim
++++ b/lib/pure/hashes.nim
+@@ -121,7 +121,7 @@ proc hiXorLo(a, b: uint64): uint64 {.inline.} =
+   else:
+     when Hash.sizeof < 8:
+       result = hiXorLoFallback64(a, b)
+-    elif defined(gcc) or defined(llvm_gcc) or defined(clang):
++    elif not defined(nimCproc) and (defined(gcc) or defined(llvm_gcc) or defined(clang)):
+       result = uint64(0)
+       {.emit: """__uint128_t r = `a`; r *= `b`; `result` = (r >> 64) ^ r;""".}
+     elif defined(windows) and not defined(tcc):
+diff --git a/lib/system/memory.nim b/lib/system/memory.nim
+index 156773c..feac41d 100644
+--- a/lib/system/memory.nim
++++ b/lib/system/memory.nim
+@@ -5,16 +5,21 @@ const useLibC = not defined(nimNoLibc)
+ when useLibC:
+   import ansi_c
+ 
+-proc nimCopyMem*(dest, source: pointer, size: Natural) {.nonReloadable, compilerproc, inline.} =
+-  when useLibC:
+-    c_memcpy(dest, source, cast[csize_t](size))
+-  else:
+-    let d = cast[ptr UncheckedArray[byte]](dest)
+-    let s = cast[ptr UncheckedArray[byte]](source)
+-    var i = 0
+-    while i < size:
+-      d[i] = s[i]
+-      inc i
++when defined(nimCproc) and useLibC:
++  # Use libc's const-correct source parameter instead of a generated void* wrapper.
++  proc nimCopyMem*(dest, source: pointer; size: Natural) {.
++    importc: "nimCopyMem", header: "<string.h>", raises: [], tags: [], nonReloadable, compilerproc.}
++else:
++  proc nimCopyMem*(dest, source: pointer, size: Natural) {.nonReloadable, compilerproc, inline.} =
++    when useLibC:
++      c_memcpy(dest, source, cast[csize_t](size))
++    else:
++      let d = cast[ptr UncheckedArray[byte]](dest)
++      let s = cast[ptr UncheckedArray[byte]](source)
++      var i = 0
++      while i < size:
++        d[i] = s[i]
++        inc i
+ 
+ proc nimSetMem*(a: pointer, v: cint, size: Natural) {.nonReloadable, inline.} =
+   when useLibC:

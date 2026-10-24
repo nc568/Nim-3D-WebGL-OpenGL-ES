@@ -1,0 +1,6 @@
+version = "0.1.0"
+author = "nc568"
+description = "Small Nim graphics layer for pure JS WebGL and native GLES"
+license = "BSD-3-Clause"
+srcDir = "src"
+requires "nim >= 2.2.4"

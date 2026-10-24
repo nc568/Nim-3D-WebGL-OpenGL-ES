@@ -1,0 +1,12 @@
+{
+  "private": true,
+  "scripts": {
+    "test:browser": "node tools/browser_test.cjs",
+    "test:timing": "node tools/timing_test.cjs",
+    "test:autoscale": "node tools/autoscale_test.cjs"
+  },
+  "devDependencies": {
+    "@sparticuz/chromium": "153.0.0",
+    "puppeteer-core": "25.16.0"
+  }
+}
