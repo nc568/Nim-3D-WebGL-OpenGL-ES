@@ -1,13 +1,15 @@
 ## Shared-handle frame scope. Aliases share state/disposal, not independent frames.
 ## One pipeline at a time per context; no foreign framebuffer/VAO interleaving.
-import ./[types, post_types]
-export post_types
+import ./[types, post_types, scopes]
+export post_types, scopes
 when defined(js):
   import ./backends/web as backend
 else:
   import ./backends/gles as backend
 
 type Pipeline* = ref object
+  scopes: ContextScopes
+  owner: ScopeOwner
   context: backend.Context
   target: backend.PostTarget
   post: backend.PostPass
@@ -17,10 +19,13 @@ type Pipeline* = ref object
   stats*: PipelineStats
 
 proc initPipeline*(context: backend.Context; caps: Capabilities;
-                   maxTargetPixels = DefaultTargetPixels): Pipeline =
+                   maxTargetPixels = DefaultTargetPixels; scopes: ContextScopes = nil): Pipeline =
   if maxTargetPixels < 1 or maxTargetPixels > high(int32) div 6:
     raise newException(ValueError,"Invalid post pixel budget")
+  scopes.requireContext()
   new(result)
+  result.scopes = scopes
+  result.owner = newScopeOwner()
   result.context = context
   result.modern = caps.api in {webgl2,gles3}
   result.budget = maxTargetPixels
@@ -29,9 +34,10 @@ proc initPipeline*(context: backend.Context; caps: Capabilities;
 
 proc renderSize*(p: Pipeline): SurfaceSize =
   if p.isNil or not p.alive: raise newException(ValueError,"Pipeline is disposed")
+  p.scopes.requireContext()
   (p.rw,p.rh)
 
-proc beginFrame*(p: var Pipeline; width,height: int;
+proc beginFrameImpl(p: var Pipeline; width,height: int;
                  settings = defaultPost()): bool =
   ## Returns false for a minimized/zero-sized surface. Scene draws within this
   ## scope MUST use renderSize and clear=false. Camera aspect uses OUTPUT size.
@@ -69,18 +75,39 @@ proc beginFrame*(p: var Pipeline; width,height: int;
   p.stats.offscreen = p.offscreen
   p.stats.finalDrawCalls = 0
   if p.rw == 0: return false
-  backend.beginTarget(p.context,p.target,p.offscreen,p.rw,p.rh)
+  try: backend.beginTarget(p.context,p.target,p.offscreen,p.rw,p.rh)
+  except:
+    p.scopes.invalidate()
+    raise
   p.active = true
   true
+
+proc beginFrame*(p: var Pipeline; width,height: int;
+                 settings = defaultPost()): bool =
+  if p.isNil or not p.alive: raise newException(ValueError,"Pipeline is disposed")
+  if p.active: raise newException(ValueError,"Frame already active")
+  p.scopes.claim(frameScope,p.owner)
+  try:
+    result = p.beginFrameImpl(width,height,settings)
+  finally:
+    if not p.active: p.scopes.release(frameScope,p.owner)
 
 proc cancelFrame*(p: var Pipeline) =
   ## No presentation; useful in finally after an exception. Idempotent.
   if not p.isNil and p.active:
-    try: backend.defaultTarget(p.context)
-    finally: p.active = false
+    try:
+      p.scopes.requireContext()
+      backend.defaultTarget(p.context)
+    except:
+      p.scopes.invalidate()
+      raise
+    finally:
+      p.active = false
+      p.scopes.release(frameScope,p.owner)
 
 proc endFrame*(p: var Pipeline) =
   if p.isNil or not p.alive or not p.active: raise newException(ValueError,"No active frame")
+  p.scopes.requireContext()
   try:
     if p.offscreen:
       backend.present(p.context,p.post,p.target,p.w,p.h,p.rw,p.rh,p.settings)
@@ -92,17 +119,21 @@ proc endFrame*(p: var Pipeline) =
 
 proc dispose*(p: var Pipeline) =
   if p.isNil or not p.alive: return
-  p.alive = false # invalidate aliases even if a driver call throws
-  p.cancelFrame()
-  backend.destroyTarget(p.context,p.target)
-  backend.destroyPost(p.context,p.post)
+  p.scopes.claim(frameScope,p.owner) # reject foreign active frame before GL calls
   p.alive = false
-  p.stats.allocatedBytes = 0
+  try:
+    p.cancelFrame()
+    backend.destroyTarget(p.context,p.target)
+    backend.destroyPost(p.context,p.post)
+    p.stats.allocatedBytes = 0
+  finally:
+    p.scopes.release(frameScope,p.owner)
 
 proc abandon*(p: var Pipeline) =
   ## Context LOST only: forget invalid handles without issuing any GL calls.
   ## Recreate with initPipeline on the restored context.
   if p.isNil: return
+  p.scopes.invalidate()
   p.alive = false
   p.active = false
   p.postReady = false

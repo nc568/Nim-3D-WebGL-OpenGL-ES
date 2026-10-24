@@ -1,6 +1,8 @@
 ## Nonblocking bounded queue. Shared timer identity, explicit current context; do not
 ## interleave elapsed queries from other profilers. No clock or GL enums here.
 import std/math
+import ./scopes
+export scopes
 const TimerSlots* = 4
 
 type
@@ -19,6 +21,8 @@ type
     count*: int
     samples*: array[TimerSlots,GpuSample]
   GpuTimer* = ref object
+    scopes: ContextScopes
+    owner: ScopeOwner
     driver: TimerDriver
     alive, active: bool
     head, pending: int
@@ -29,19 +33,25 @@ type
 proc bump(x: var int) =
   if x < high(int): inc x
 
-proc destroyPool(driver: TimerDriver; count: int): bool =
+proc destroyPool(driver: TimerDriver; count: int; scopes: ContextScopes): bool =
   ## Each slot attempted once, even if another delete fails. No GL calls after loss.
   result = true
   for slot in 0..<count:
     try:
-      if driver.lost(): return result
+      if driver.lost():
+        scopes.invalidate()
+        return result
     except:
+      scopes.invalidate()
       return false # context state uncertain; do not issue more calls
     try: driver.destroy(slot)
     except: result = false
 
-proc initGpuTimer*(driver: TimerDriver): GpuTimer =
+proc initGpuTimer*(driver: TimerDriver; scopes: ContextScopes = nil): GpuTimer =
+  scopes.requireContext()
   new(result)
+  result.scopes = scopes
+  result.owner = newScopeOwner()
   result.alive = true
   if not driver.supported: return
   if driver.create == nil or driver.destroy == nil or driver.beginQuery == nil or
@@ -57,10 +67,10 @@ proc initGpuTimer*(driver: TimerDriver): GpuTimer =
       inc created
     complete = created == TimerSlots
   except:
-    discard destroyPool(driver,created) # preserve original create exception
+    discard destroyPool(driver,created,scopes) # preserve original create exception
     raise
   if not complete:
-    if not destroyPool(driver,created):
+    if not destroyPool(driver,created,scopes):
       raise newException(ValueError,"Timer allocation rollback failed")
     return # CPU-only; rollback is OUTSIDE create's exception handler
   result.supported = true
@@ -68,6 +78,7 @@ proc initGpuTimer*(driver: TimerDriver): GpuTimer =
 proc abandon*(t: var GpuTimer) =
   ## Context lost/driver failure: no end/delete. All aliases become invalid.
   if t.isNil: return
+  t.scopes.invalidate()
   t.alive = false
   t.active = false
   t.supported = false
@@ -91,6 +102,7 @@ proc healthy(t: var GpuTimer): bool =
 proc beginSample*(t: var GpuTimer; frame: int): bool =
   if t.isNil or not t.alive: raise newException(ValueError,"Timer is disposed/lost")
   if t.active: raise newException(ValueError,"Timer query already active")
+  t.scopes.requireAvailable(queryScope,t.owner)
   try:
     if not t.supported or not t.healthy(): return false
     if t.pending == TimerSlots:
@@ -98,6 +110,7 @@ proc beginSample*(t: var GpuTimer; frame: int): bool =
       return false
     let slot = (t.head+t.pending) mod TimerSlots
     t.frames[slot] = frame
+    t.scopes.claim(queryScope,t.owner)
     t.driver.beginQuery(slot)
     t.active = true
     return true
@@ -108,12 +121,14 @@ proc beginSample*(t: var GpuTimer; frame: int): bool =
 proc endSample*(t: var GpuTimer) =
   if t.isNil or not t.active: return
   try:
+    t.scopes.requireContext()
     if t.driver.lost():
       t.abandon()
       return
     t.active = false # never retry a possibly completed end call
     t.driver.endQuery()
     inc t.pending
+    t.scopes.release(queryScope,t.owner)
   except:
     t.abandon()
     raise
@@ -122,6 +137,7 @@ proc poll*(t: var GpuTimer; batch: var GpuBatch) =
   batch.count = 0
   if t.isNil: return
   if t.active: raise newException(ValueError,"Poll outside query scope")
+  if t.alive: t.scopes.requireAvailable(queryScope,t.owner)
   try:
     if not t.alive or not t.supported or not t.healthy(): return
     while t.pending > 0:
@@ -146,13 +162,20 @@ proc reset*(t: var GpuTimer) =
 
 proc dispose*(t: var GpuTimer) =
   if t.isNil or not t.alive: return
+  t.scopes.requireAvailable(queryScope,t.owner)
   t.alive = false # aliases cannot start new work during cleanup
   try:
     if t.supported:
-      if t.driver.lost(): return
+      if t.driver.lost():
+        t.abandon()
+        return
       t.endSample()
       if not t.supported: return # endSample observed context loss
-      if not destroyPool(t.driver,TimerSlots):
+      if not destroyPool(t.driver,TimerSlots,t.scopes):
         raise newException(ValueError,"Timer pool cleanup failed")
   finally:
-    t.abandon()
+    t.scopes.release(queryScope,t.owner)
+    t.alive = false
+    t.active = false
+    t.supported = false
+    t.pending = 0

@@ -188,3 +188,10 @@ GpuTimer разделяет identity между aliases; rollback cleanup не �
 после исключения. Driver callback failures закрывают timer и подавляют partial
 samples. Global context/query arbiter не добавлен: отдельные драйверы всё ещё
 нельзя interleave. См. validation-timer-lifetime.md.
+
+## Уточнение после шестнадцатого среза
+
+Explicit ContextScopes добавляет независимые frame/query channels с owner identity.
+Это opt-in host-managed guard, не глобальное обнаружение GL context или защита raw
+backend calls. Demo подключён и заменяет guard при restore. Подробнее:
+validation-scopes.md.

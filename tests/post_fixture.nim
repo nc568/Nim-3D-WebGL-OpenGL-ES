@@ -6,7 +6,8 @@ proc runPostProbe*(ctx: Context; caps: Capabilities; read: FrameReader) =
   var mesh: MeshData
   mesh.addBox([0'f32,0,0],[0.63'f32,0.51,0.2],[0.8'f32,0.3,0.1])
   var r = initRenderer(ctx,caps,mesh.indexed())
-  var p = initPipeline(ctx,caps)
+  let scopes = newContextScopes()
+  var p = initPipeline(ctx,caps,scopes=scopes)
   var neutral = defaultPost()
   neutral.fxaa = false
   neutral.dither = false
@@ -96,7 +97,7 @@ proc runPostProbe*(ctx: Context; caps: Capabilities; read: FrameReader) =
   try: discard p.beginFrame(64,64)
   except ValueError: rejected = true
   doAssert rejected
-  p = initPipeline(ctx,caps,maxTargetPixels=64*64)
+  p = initPipeline(ctx,caps,maxTargetPixels=64*64,scopes=scopes)
   rejected = false
   try: discard alias.beginFrame(64,64)
   except ValueError: rejected = true
@@ -119,6 +120,31 @@ proc runPostProbe*(ctx: Context; caps: Capabilities; read: FrameReader) =
   doAssert rejected # active state is shared, not copied
   p.endFrame()
   alias.cancelFrame()
+  # Independent pipelines share one context guard. Rejection precedes allocation.
+  var other = initPipeline(ctx,caps,scopes=scopes)
+  doAssert p.beginFrame(64,64)
+  let oldRebuilds = other.stats.targetRebuilds
+  rejected = false
+  try: discard other.beginFrame(64,64)
+  except ValueError: rejected = true
+  doAssert rejected and other.stats.targetRebuilds == oldRebuilds
+  rejected = false
+  try: other.dispose()
+  except ValueError: rejected = true
+  doAssert rejected
+  p.endFrame()
+  doAssert other.beginFrame(64,64)
+  other.cancelFrame()
+  doAssert not p.beginFrame(0,0) # no retained lock for a minimized surface
+  doAssert other.beginFrame(64,64)
+  other.endFrame()
+  rejected = false
+  try: discard p.beginFrame(-1,64)
+  except ValueError: rejected = true
+  doAssert rejected
+  doAssert other.beginFrame(64,64)
+  other.endFrame()
+  other.dispose()
   p.dispose()
   alias = p
   p.abandon()

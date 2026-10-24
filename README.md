@@ -312,3 +312,11 @@ state и stats. `dispose` через любой alias инвалидирует �
 `GpuTimer` также использует shared identity: aliases разделяют очередь и scope,
 а dispose/abandon инвалидируют их вместе. Callback failure прекращает работу timer,
 не вызывая слепых GL retries. [Timer lifecycle и ограничения](docs/validation-timer-lifetime.md).
+
+## Общие границы frame/query
+
+Создайте один `newContextScopes()` на GL context и передайте его всем pipelines
+(`scopes=…`) и timers (второй аргумент `initGpuTimer`). Guard отвергает overlapping
+frames/queries разных owners до driver calls; frame и его GPU measurement совместимы.
+После context loss нужен новый guard. Nil сохраняет прежний режим без arbitration.
+[Контракт, тесты и ограничения](docs/validation-scopes.md).

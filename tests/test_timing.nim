@@ -256,3 +256,90 @@ for failure in 0..2:
   except ValueError: rejected = true
   doAssert rejected
 echo "Shared timer aliases / rollback exactly once / callback failure isolation PASS"
+
+# Independent timer objects, one explicitly shared context guard.
+proc fakeDriver(onBegin, onEnd: proc() {.closure.}): TimerDriver =
+  result.supported = true
+  result.create = proc(slot: int): bool = true
+  result.destroy = proc(slot: int) = discard
+  result.beginQuery = proc(slot: int) = onBegin()
+  result.endQuery = onEnd
+  result.available = proc(slot: int): bool = false
+  result.milliseconds = proc(slot: int): float64 = 1
+  result.disjoint = proc(): bool = false
+  result.lost = proc(): bool = false
+let scopes = newContextScopes()
+var firstBegins, secondBegins, firstEnds, secondEnds: int
+var first = initGpuTimer(fakeDriver(proc() = inc(firstBegins), proc() = inc(firstEnds)),scopes)
+var second = initGpuTimer(fakeDriver(proc() = inc(secondBegins), proc() = inc(secondEnds)),scopes)
+doAssert first.beginSample(1)
+rejected = false
+try: discard second.beginSample(2)
+except ValueError: rejected = true
+doAssert rejected and secondBegins == 0 and second.supported
+rejected = false
+try: second.poll(batch)
+except ValueError: rejected = true
+doAssert rejected and batch.count == 0
+rejected = false
+try: second.dispose()
+except ValueError: rejected = true
+doAssert rejected and second.supported
+first.endSample()
+doAssert second.beginSample(2)
+second.endSample()
+doAssert firstEnds == 1 and secondEnds == 1
+# Frame and query are independent channels; measuring a frame is legal.
+let frameOwner = newScopeOwner()
+let foreignOwner = newScopeOwner()
+scopes.claim(frameScope,frameOwner)
+doAssert first.beginSample(3)
+rejected = false
+try: scopes.claim(frameScope,foreignOwner)
+except ValueError: rejected = true
+doAssert rejected
+scopes.release(frameScope,foreignOwner) # must NOT unlock someone else's frame
+rejected = false
+try: scopes.claim(frameScope,foreignOwner)
+except ValueError: rejected = true
+doAssert rejected
+first.endSample()
+scopes.release(frameScope,frameOwner)
+scopes.claim(frameScope,foreignOwner)
+scopes.release(frameScope,foreignOwner)
+first.dispose() # normal disposal does not invalidate the shared context
+doAssert second.beginSample(4)
+second.endSample()
+second.dispose()
+scopes.requireContext()
+# Different context guards are independent; stale guards never reset in place.
+let oldScopes = newContextScopes()
+let newScopes = newContextScopes()
+first = initGpuTimer(fakeDriver(proc() = inc(firstBegins), proc() = inc(firstEnds)),oldScopes)
+second = initGpuTimer(fakeDriver(proc() = inc(secondBegins), proc() = inc(secondEnds)),newScopes)
+doAssert first.beginSample(1) and second.beginSample(1)
+let beforeInvalidEnd = firstEnds
+oldScopes.invalidate()
+rejected = false
+try: first.endSample()
+except ValueError: rejected = true
+doAssert rejected and firstEnds == beforeInvalidEnd and not first.supported
+second.endSample()
+second.dispose()
+newScopes.requireContext()
+rejected = false
+try: discard initGpuTimer(TimerDriver(),oldScopes)
+except ValueError: rejected = true
+doAssert rejected
+# A failed begin poisons its shared context, not just that timer.
+let faultScopes = newContextScopes()
+var faulty = initGpuTimer(fakeDriver(proc() = raise newException(ValueError,"fault"),proc() = discard),faultScopes)
+rejected = false
+try: discard faulty.beginSample(1)
+except ValueError: rejected = true
+doAssert rejected
+rejected = false
+try: faultScopes.claim(frameScope,frameOwner)
+except ValueError: rejected = true
+doAssert rejected
+echo "Shared context frame/query arbitration / rejection before driver / recovery isolation PASS"

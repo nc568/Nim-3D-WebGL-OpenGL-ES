@@ -48,14 +48,15 @@ var shadowsEnabled = true
 var atmosphere = SceneEffects(fogEnabled:true,fogNear:18,fogFar:55,fogColor:SkyBottom)
 for i in 0..2:
   atmosphere.blobs[i] = BlobShadow(radiusX:0.95,radiusZ:1.6,strength:0.45)
-var pipeline = initPipeline(device.ctx,device.caps)
+var contextScopes = newContextScopes()
+var pipeline = initPipeline(device.ctx,device.caps,scopes=contextScopes)
 var post = defaultPost()
 proc showPost(w,h,draws: int) {.importjs: "(document.getElementById('post-stats').textContent = # + '×' + # + ' · final: ' + #)".}
 proc clockMs(): float64 {.importjs: "performance.now()".}
 proc visible(): bool {.importjs: "(document.visibilityState === 'visible')".}
 proc publishTiming(cb: proc(): JsObject) {.importjs: "(globalThis.softgfxTiming = #)".}
 proc timingText(text: cstring) {.importjs: "(document.getElementById('timing-stats').textContent = #)".}
-var timer = initGpuTimer(gpuClock.timerDriver(device.ctx,device.caps.api == webgl2))
+var timer = initGpuTimer(gpuClock.timerDriver(device.ctx,device.caps.api == webgl2),contextScopes)
 var profile = initFrameProfile()
 var readback: GpuBatch
 var automatic = false
@@ -234,8 +235,9 @@ onEvent(surface, "webglcontextlost", proc(e: JsObject) =
   markReady("lost"))
 onEvent(surface, "webglcontextrestored", proc(e: JsObject) =
   # All previous GL resources are invalid. Rebuild from retained CPU asset.
-  pipeline = initPipeline(device.ctx,device.caps)
-  timer = initGpuTimer(gpuClock.timerDriver(device.ctx,device.caps.api == webgl2))
+  contextScopes = newContextScopes()
+  pipeline = initPipeline(device.ctx,device.caps,scopes=contextScopes)
+  timer = initGpuTimer(gpuClock.timerDriver(device.ctx,device.caps.api == webgl2),contextScopes)
   resetMeasurements()
   autoUnavailable(device.caps.api == webgl1 or not timer.supported)
   sky = initSkyRenderer(device.ctx,device.caps,SkyBottom,SkyTop)
