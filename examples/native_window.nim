@@ -321,8 +321,8 @@ let smoke = "--smoke" in commandLineParams()
 let version = if "--gles2" in commandLineParams(): 2 else: 3
 let desktopTest = "--desktop-test" in commandLineParams()
 let robust = "--robust" in commandLineParams()
-let profiling = "--profile" in commandLineParams()
+let profileRequested = "--profile" in commandLineParams()
 let resetStorm = "--reset-storm" in commandLineParams()
 if resetStorm and not smoke: raise newException(ValueError,"--reset-storm requires --smoke")
-run(version,smoke,desktopTest,robust,profiling,resetStorm)
-if smoke: run(version,true,false,robust,profiling,resetStorm) # SDL/window/context recreation, not only resource recreation
+run(version,smoke,desktopTest,robust,profileRequested,resetStorm)
+if smoke: run(version,true,false,robust,profileRequested,resetStorm) # SDL/window/context recreation, not only resource recreation
