@@ -224,3 +224,10 @@ strict robust context, bounded abandon/rebuild path и native timing/capability 
 Normal, robust, injected-loss и reset-storm window scenarios включены в matrix.
 Аппаратная надёжность reset path не выводится из software injection. См.
 validation-native-recovery.md.
+
+## Пакет 21: workloads и sparse ordering
+
+Uniform grid использует adaptive in-place prefix sort / dense mark scan вместо
+безусловного O(N) clear+scan. API stable prefix прежний; добавлены ordering counters.
+CPU/GPU workload oracles и strict JSON collectors дают evidence для следующих
+hardware экспериментов, но не подменяют их. См. validation-workloads.md.

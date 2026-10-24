@@ -11,6 +11,7 @@ type
     ready: bool
   GridQueryStats* = object
     occupiedCells*, candidateCells*, instanceTests*, visibleInstances*: int
+    orderScans*, orderComparisons*: int
 
 proc initSpatialGrid*(region: Bounds; divisions: array[3,int]; capacity: int): SpatialGrid =
   region.validate()
@@ -60,6 +61,26 @@ proc rebuild*(grid: var SpatialGrid; local: Bounds; items: openArray[Instance]) 
   grid.count = items.len
   grid.ready = true
 
+proc siftIndices(indices: var seq[int]; root, count: int; comparisons: var int) =
+  var at = root
+  while at*2+1 < count:
+    var child = at*2+1
+    if child+1 < count:
+      inc comparisons
+      if indices[child] < indices[child+1]: inc child
+    inc comparisons
+    if indices[at] >= indices[child]: break
+    swap(indices[at],indices[child])
+    at = child
+
+proc sortIndexPrefix(indices: var seq[int]; count: int; comparisons: var int) =
+  ## In-place heapsort: no slices, recursion or allocation; ascending source order.
+  if count < 2: return
+  for root in countdown(count div 2-1,0): siftIndices(indices,root,count,comparisons)
+  for last in countdown(count-1,1):
+    swap(indices[0],indices[last])
+    siftIndices(indices,0,last,comparisons)
+
 proc collectVisible*(f: Frustum; grid: var SpatialGrid; indices: var seq[int];
                      stats: var GridQueryStats): int =
   ## Stable source-order prefix, same as flat collectVisible. No allocation/resize.
@@ -70,7 +91,8 @@ proc collectVisible*(f: Frustum; grid: var SpatialGrid; indices: var seq[int];
   stats.candidateCells = 0
   stats.instanceTests = 0
   stats.visibleInstances = 0
-  for i in 0..<grid.count: grid.marks[i] = false
+  stats.orderScans = 0
+  stats.orderComparisons = 0
   for cell in 0..<grid.heads.len:
     if grid.heads[cell] == 0: continue
     inc stats.occupiedCells
@@ -80,10 +102,26 @@ proc collectVisible*(f: Frustum; grid: var SpatialGrid; indices: var seq[int];
     while entry != 0:
       let i = entry-1
       inc stats.instanceTests
-      grid.marks[i] = f.intersects(grid.boxes[i])
+      if f.intersects(grid.boxes[i]):
+        indices[result] = i
+        inc result
       entry = grid.links[i]
-  for i in 0..<grid.count:
-    if grid.marks[i]:
-      indices[result] = i
-      inc result
+  # Sparse hits: sort only the selected prefix. Dense hits: linear stable scan.
+  # Marks are set/cleared only on the dense path; no O(N) clear before every query.
+  var levels = 1
+  var remaining = result
+  while remaining > 1:
+    inc levels
+    remaining = remaining div 2
+  if result <= grid.count div (2*levels):
+    sortIndexPrefix(indices,result,stats.orderComparisons)
+  else:
+    for i in 0..<result: grid.marks[indices[i]] = true
+    var written = 0
+    for i in 0..<grid.count:
+      inc stats.orderScans
+      if grid.marks[i]:
+        grid.marks[i] = false
+        indices[written] = i
+        inc written
   stats.visibleInstances = result

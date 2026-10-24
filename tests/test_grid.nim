@@ -59,3 +59,19 @@ for bad in [[0,1,1],[33,1,1]]:
   except ValueError: rejected = true
   doAssert rejected
 echo "Grid flat-oracle/atomicity/empty/outliers PASS; sparse instance tests: ",savedTests," / 1024"
+# Ordering threshold transitions and nontrivial unsorted sparse prefixes.
+for hits in [0,1,2,3,4,7,8,16,32,64,128,256,768,1024]:
+  for i in 0..<poses.len:
+    if (i*137) mod 1024 < hits:
+      poses[i] = instance([float32((i*31) mod 17)/20'f32-0.4'f32,0,
+        float32((i*19) mod 17)/20'f32-0.4'f32])
+    else: poses[i] = instance([50'f32,50,50])
+    indexed[i] = -7
+  grid.rebuild(local,poses)
+  doAssert f.collectVisible(local,poses,flat) == hits
+  doAssert f.collectVisible(grid,indexed,stats) == hits
+  for i in 0..<hits: doAssert indexed[i] == flat[i]
+  for i in hits..<indexed.len: doAssert indexed[i] == -7
+  if hits <= 32: doAssert stats.orderScans == 0
+  if hits >= 256: doAssert stats.orderScans == poses.len
+echo "Grid sparse heapsort / dense transitions / untouched tail PASS"

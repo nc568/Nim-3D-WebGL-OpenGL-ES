@@ -347,3 +347,11 @@ poses, owner edits, camera и post settings сохраняются. Smoke/deskto
 использует advertised KHR/EXT robustness (либо GLES3.2 core), recovery — abandon и
 новый context с budget 3/session. Test-only L и --reset-storm проверяют simulated
 loss, а не аппаратный reset. [Пакет recovery/reporting](docs/validation-native-recovery.md).
+
+## Workload regression и sparse-grid optimization
+
+Grid query теперь сортирует только sparse visible prefix, сохраняя linear scan для
+dense views; полный clear marks больше не нужен. Workloads 64/1024/8192 на CPU и
+256 на GPU проверяют culling/packing/pixel parity и экспортируют отдельные JSON
+reports в CI. Числа debug/software CI — не hardware FPS и не завершённый E1–E7:
+[контракт и методика](docs/validation-workloads.md).

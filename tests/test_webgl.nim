@@ -1,6 +1,6 @@
 import std/jsffi
 import softgfx/backends/web
-import territory_fixture, instance_fixture, post_fixture, environment_fixture, culling_fixture, motion_fixture, dirty_fixture
+import territory_fixture, instance_fixture, post_fixture, environment_fixture, culling_fixture, motion_fixture, dirty_fixture, workload_fixture
 proc canvas(): JsObject {.importjs: "document.getElementById('scene')".}
 proc legacy(): bool {.importjs: "(new URLSearchParams(location.search).has('webgl1'))".}
 proc bytes(): JsObject {.importjs: "new Uint8Array(4)".}
@@ -40,6 +40,11 @@ runMotionProbe(device.ctx,device.caps,proc(): seq[uint8] =
   for i in 0..<result.len: result[i] = uint8(item(frame,i)))
 doAssert device.ctx.getError().to(int) == 0
 runDirtyProbe(device.ctx,device.caps,proc(): seq[uint8] =
+  device.ctx.readPixels(0,0,64,64,0x1908,0x1401,frame)
+  result = newSeq[uint8](64*64*4)
+  for i in 0..<result.len: result[i] = uint8(item(frame,i)))
+doAssert device.ctx.getError().to(int) == 0
+runWorkloadProbe(device.ctx,device.caps,proc(): seq[uint8] =
   device.ctx.readPixels(0,0,64,64,0x1908,0x1401,frame)
   result = newSeq[uint8](64*64*4)
   for i in 0..<result.len: result[i] = uint8(item(frame,i)))

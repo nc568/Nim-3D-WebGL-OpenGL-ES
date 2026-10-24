@@ -50,3 +50,7 @@ visibleInstances; относятся к одному успешному query, �
 
 Реальный native window/mobile/ARM execution и hardware FPS остаются отдельными
 пунктами приёмки. Grid не заменяет проверки на физических устройствах.
+
+Обновление пакета 21: описание обязательного O(N) clear/scan выше относится к
+первой реализации. Sparse queries теперь используют in-place prefix sorting;
+dense queries сохраняют scan. Подробности и новые счётчики — validation-workloads.md.

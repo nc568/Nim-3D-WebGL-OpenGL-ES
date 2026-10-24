@@ -58,6 +58,8 @@ jobs:
           TEST_UI=1 USE_BUNDLED_LIBS=1 node tools/browser_test.cjs 2>&1 | tee build/ci-browser.log
           USE_BUNDLED_LIBS=1 node tools/autoscale_test.cjs 2>&1 | tee build/ci-autoscale.log
           USE_BUNDLED_LIBS=1 node tools/timing_test.cjs 2>&1 | tee build/ci-timing.log
+      - name: Workload browser report
+        run: python3 tools/collect_workloads.py browser
       - name: Browser failure diagnostics
         if: failure()
         shell: bash
@@ -81,6 +83,7 @@ jobs:
             build/ci-*.log
             build/*.png
             build/timing-report.json
+            build/workload-browser.json
 
   native:
     name: GCC + LLVM + cproc-QBE / GLES2-3
@@ -107,6 +110,8 @@ jobs:
           done
       - name: Native debug, release and ARM64 cross-link
         run: ./tools/ci_native.sh
+      - name: Workload native report
+        run: python3 tools/collect_workloads.py native
       - name: SDL window dependencies
         run: |
           sudo apt-get update
@@ -135,3 +140,4 @@ jobs:
           path: |
             build/ci-*.log
             build/native-report.json
+            build/workload-native.json

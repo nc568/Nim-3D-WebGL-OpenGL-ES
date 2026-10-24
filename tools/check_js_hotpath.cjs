@@ -1,7 +1,7 @@
 // Regression guard for pinned Nim JS codegen, not a whole-program allocation profiler.
 const fs = require('fs');
 const source = fs.readFileSync(process.argv[2] || 'build/browser.js', 'utf8');
-const prefixes=process.argv[3]==='recovery' ? ['poll__','markLost__','consume__'] : process.argv[3]==='scopes' ? ['claim__','release__','requireAvailable__','requireContext__'] : process.argv[3]==='identity' ? ['alignHistory__','copyPose__','indexIds__','slot__'] : process.argv[3]==='motion' ? ['interpolateInstances__','blendYaw__','blend__'] : process.argv[3]==='culling' ? ['transformedInto__','intersects__','packVisibleChanged__'] : ['packInstancesChanged__', 'packRecordChanged__', 'storeChanged__', 'effectChanges__', 'retainEffects__', 'validate__OOZsrcZsoftgfxZinstances_', 'carSnapshot__'];
+const prefixes=process.argv[3]==='grid' ? ['sortIndexPrefix__','siftIndices__'] : process.argv[3]==='recovery' ? ['poll__','markLost__','consume__'] : process.argv[3]==='scopes' ? ['claim__','release__','requireAvailable__','requireContext__'] : process.argv[3]==='identity' ? ['alignHistory__','copyPose__','indexIds__','slot__'] : process.argv[3]==='motion' ? ['interpolateInstances__','blendYaw__','blend__'] : process.argv[3]==='culling' ? ['transformedInto__','intersects__','packVisibleChanged__'] : ['packInstancesChanged__', 'packRecordChanged__', 'storeChanged__', 'effectChanges__', 'retainEffects__', 'validate__OOZsrcZsoftgfxZinstances_', 'carSnapshot__'];
 for (const prefix of prefixes) {
   const start = source.indexOf('function ' + prefix);
   if (start < 0) throw Error('Missing expected Nim hot-path function: ' + prefix);
