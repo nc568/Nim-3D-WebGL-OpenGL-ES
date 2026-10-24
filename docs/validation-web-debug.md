@@ -31,6 +31,10 @@ suite, не shipping Firefox/Safari certification и не iOS runtime. Playwrigh
 - Каждые 60 submitted frames: draw calls, visible instances, cumulative successful
   instance upload bytes/skips. Это samples, не полный trace и не GPU elapsed time.
 - Debug-only initial capability snapshot, без unmasked GPU identity.
+- Экспорт добавляет whitelist текущих counters/quality/target memory и CPU/GPU
+  median/p95 из существующего profiler. Таймер не включается автоматически:
+  используйте «Измерить CPU/GPU»; без samples timings остаются null. Сбор profile
+  происходит только при export/snapshot, а не на каждом кадре.
 - Export отделён от внутреннего mutable state; stop снимает event listeners.
 - Нет перехвата GL calls/console, getError, readPixels, network, localStorage или
   сериализации произвольных Error/payload objects. Нет бесконечного лога на кадр.

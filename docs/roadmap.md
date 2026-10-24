@@ -38,8 +38,8 @@ Network jitter/authoritative synchronization — соседний host/gameplay 
 
 ## Порядок продолжения
 
-Сначала release workload harness и воспроизводимый hardware report format, параллельно
-host lifecycle foundation; затем доступные device runs и выбор T1/T2 budgets.
+Сначала WebGL release workloads под сцены игры, browser diagnostics и frame budgets;
+затем OpenGL ES parity. Физические device runs и выбор дорогих T1/T2 опций — позже.
 Добавление Vulkan/Metal не должно нарушать pure-JS/WebGL1 и cproc/QBE regression paths.
 Реальные device tests требуют доступного устройства/runner: CI software results нельзя
 помечать как пройденные hardware acceptance criteria.

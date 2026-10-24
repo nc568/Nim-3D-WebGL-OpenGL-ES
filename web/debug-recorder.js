@@ -23,6 +23,21 @@
     listen(canvas, event, () => record('context', event));
   }
   listen(document, 'visibilitychange', () => record('visibility', document.visibilityState));
+  const readProfile = () => {
+    if (typeof globalThis.softgfxTiming !== 'function') return null;
+    try {
+      const source = globalThis.softgfxTiming(), result = {};
+      for (const key of ['frames','warmupFrames','cpuSamples','gpuSamples','gpuSupported',
+        'cpuMedianMs','cpuP95Ms','gpuMedianMs','gpuP95Ms','renderWidth','renderHeight',
+        'drawCalls','scale','targetBytes','instanceUploadBytes','instanceUpdates',
+        'instanceSkippedUpdates','effectUniformCalls','cullingEnabled','visibleCars',
+        'sourceCars','postEnabled','fxaa','contextLost']) {
+        const value = source[key];
+        if (value === null || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))) result[key] = value;
+      }
+      return result;
+    } catch { return {unavailable:true}; } // export logs even during failed teardown
+  };
   const api = {
     attach(gl, apiName) {
       if (stopped) return;
@@ -45,7 +60,7 @@
       for (let i = Math.max(0, total - capacity); i < total; i++) events.push({...ring[i % capacity]});
       return {schemaVersion: 1, scope: 'host diagnostics; not GPU timing',
         capacity, total, overwritten: Math.max(0,total-capacity), frames,
-        userAgent: navigator.userAgent, graphics: graphics && {...graphics, extensions:[...graphics.extensions]}, events};
+        userAgent: navigator.userAgent, profile: readProfile(), graphics: graphics && {...graphics, extensions:[...graphics.extensions]}, events};
     },
     download() {
       const url = URL.createObjectURL(new Blob([JSON.stringify(api.snapshot(), null, 2)], {type:'application/json'}));

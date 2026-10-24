@@ -1,6 +1,6 @@
 # softgfx — Nim → pure JS / native GLES
 
-**Экспериментальный graphics middleware**, не готовый игровой движок.
+**Экспериментальный mini-engine для low-poly графики**, не универсальный игровой движок.
 Один пример сцены на Nim собирается в JavaScript без WASM для WebGL1/2 и
 в C для GLES2/3. Требуется Nim 2.2.4. Зависимостей Nim у ядра нет.
 
