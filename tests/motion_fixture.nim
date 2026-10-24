@@ -1,6 +1,6 @@
 ## Pixel oracle: midpoint of matched snapshots vs independently specified poses.
 import std/math
-import softgfx, softgfx/[geometry, motion]
+import softgfx, softgfx/[geometry, motion, identity]
 import instance_fixture
 
 proc runMotionProbe*(ctx: Context; caps: Capabilities; read: FrameReader) =
@@ -34,6 +34,31 @@ proc runMotionProbe*(ctx: Context; caps: Capabilities; read: FrameReader) =
       reference.updateInstances(if alpha == 0: before else: after)
       reference.renderInstances(64,64)
       doAssert read() == endImage
+    # ID 20 survives but moves to index zero; ID 30 spawns, ID 10 despawns.
+    var scratch = initIdentityScratch(2)
+    var aligned = newSeq[Instance](2)
+    let now = @[after[1],after[0]]
+    let change = alignHistory([10'i32,20],before,[20'i32,30],now,[],aligned,scratch)
+    doAssert change.matched == 1 and change.spawned == 1 and change.despawned == 1
+    for alpha in [0.0,0.5,1.0]:
+      interpolateInstances(aligned,now,alpha,poses)
+      discard r.updateInstancesIfChanged(poses)
+      r.renderInstances(64,64)
+      let identified = read()
+      # Independent explicit aligned history, with spawn snapped to current.
+      var oracle = newSeq[Instance](2)
+      interpolateInstances(@[before[1],after[0]],now,alpha,oracle)
+      reference.updateInstances(oracle)
+      reference.renderInstances(64,64)
+      doAssert read() == identified
+    discard alignHistory([10'i32,20],before,[20'i32,30],now,[true,false],aligned,scratch)
+    interpolateInstances(aligned,now,0.5,poses)
+    r.updateInstances(poses)
+    r.renderInstances(64,64)
+    let snapped = read()
+    reference.updateInstances(now)
+    reference.renderInstances(64,64)
+    doAssert read() == snapped
     r.dispose()
   reference.dispose()
-  echo "Motion midpoint/linear-tint/endpoints/core-fallback GPU: PASS ",caps.api
+  echo "Motion + identity reorder/spawn/despawn/reset/core-fallback GPU: PASS ",caps.api

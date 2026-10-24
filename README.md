@@ -286,3 +286,11 @@ float32 snapshot и пропускают одинаковые submissions. Ст�
 полной синхронизации). Demo использует эти пути и экспортирует счётчики skips/calls.
 Это O(N) comparison, не dirty-range upload или обещание hardware FPS:
 [контракт и проверка](docs/validation-dirty.md).
+
+## Entity identity и смена состава
+
+`softgfx/identity.alignHistory` сопоставляет snapshots по nonnegative int32 IDs:
+перестановка сохраняет историю, spawn/teleport делает snap, despawn исключает
+объект. Scratch переиспользуется; вызывайте при новом simulation snapshot, затем
+обычный `interpolateInstances` на каждом кадре. Контракт, стоимость и ограничения:
+[identity alignment](docs/validation-identity.md).

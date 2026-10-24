@@ -159,3 +159,10 @@ backend exception требует retry, новые renderer создают со�
 Forced APIs сохранены; ownership и host context-loss lifecycle не изменились.
 Это O(N) comparison, без spatial index/partial-range uploads. Подробности и
 измеренные GL calls: validation-dirty.md.
+
+## Уточнение после двенадцатого среза
+
+Optional `softgfx/identity` выравнивает previous history по current IDs до вызова
+motion interpolation. Spawn/reset snap, despawn immediate; host владеет lifetime
+и запрещает случайное переиспользование ID. Scratch allocation вынесена из
+snapshot update, GPU ownership не меняется. См. validation-identity.md.
