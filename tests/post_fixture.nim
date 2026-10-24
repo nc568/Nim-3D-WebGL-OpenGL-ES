@@ -111,6 +111,14 @@ proc runPostProbe*(ctx: Context; caps: Capabilities; read: FrameReader) =
     doAssert p.beginFrame(64,64)
     p.endFrame()
     doAssert p.stats.targetRebuilds == 1
+  alias = p
+  doAssert alias.beginFrame(64,64)
+  rejected = false
+  try: discard p.beginFrame(64,64)
+  except ValueError: rejected = true
+  doAssert rejected # active state is shared, not copied
+  p.endFrame()
+  alias.cancelFrame()
   p.dispose()
   alias = p
   p.abandon()
