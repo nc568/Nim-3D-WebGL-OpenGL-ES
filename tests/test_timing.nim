@@ -140,3 +140,119 @@ doAssert reverseWindow.percentiles() == (5'f32,10'f32)
 let huge = pow(10.0,100.0)
 reverseWindow.add(float32(huge))
 doAssert reverseWindow.sampleCount == 10
+
+# Shared queue/scope and stale aliases; no duplicate end/delete callbacks.
+driver.create = proc(slot: int): bool = true
+timer = initGpuTimer(driver)
+var alias = timer
+doAssert alias.beginSample(100)
+rejected = false
+try: discard timer.beginSample(101)
+except ValueError: rejected = true
+doAssert rejected
+let endBeforeAlias = ends
+timer.endSample()
+alias.endSample()
+doAssert ends == endBeforeAlias+1
+let deletedBeforeAlias = deletes
+alias.dispose()
+timer.dispose()
+doAssert deletes == deletedBeforeAlias+TimerSlots and not timer.supported
+rejected = false
+try: discard timer.beginSample(102)
+except ValueError: rejected = true
+doAssert rejected
+timer = initGpuTimer(driver)
+rejected = false
+try: discard alias.beginSample(103)
+except ValueError: rejected = true
+doAssert rejected
+alias = timer
+doAssert timer.beginSample(104)
+let endsBeforeAbandon = ends
+let deletesBeforeAbandon = deletes
+alias.abandon()
+timer.endSample()
+timer.dispose()
+doAssert ends == endsBeforeAbandon and deletes == deletesBeforeAbandon
+var absent: GpuTimer
+absent.endSample(); absent.reset(); absent.dispose(); absent.abandon()
+batch.count = 2
+absent.poll(batch)
+doAssert batch.count == 0
+rejected = false
+try: discard absent.beginSample(1)
+except ValueError: rejected = true
+doAssert rejected
+
+# Rollback delete failure must NOT re-enter cleanup and delete a slot twice.
+var attempts: array[TimerSlots,int]
+driver.create = proc(slot: int): bool = slot < 2
+driver.destroy = proc(slot: int) =
+  inc attempts[slot]
+  if slot == 0: raise newException(ValueError,"injected delete")
+rejected = false
+try: timer = initGpuTimer(driver)
+except ValueError: rejected = true
+doAssert rejected and attempts == [1,1,0,0]
+attempts = default(array[TimerSlots,int])
+driver.create = proc(slot: int): bool =
+  if slot == 2: raise newException(ValueError,"injected create")
+  true
+rejected = false
+try: timer = initGpuTimer(driver)
+except ValueError as e:
+  rejected = e.msg == "injected create"
+doAssert rejected and attempts == [1,1,0,0]
+# Full disposal still attempts the remaining slots once after a delete failure.
+attempts = default(array[TimerSlots,int])
+driver.create = proc(slot: int): bool = true
+timer = initGpuTimer(driver)
+alias = timer
+rejected = false
+try: timer.dispose()
+except ValueError: rejected = true
+doAssert rejected and attempts == [1,1,1,1]
+alias.dispose()
+doAssert attempts == [1,1,1,1] and not alias.supported
+
+# Callback failures invalidate all aliases; no speculative retry/partial batches.
+driver.destroy = proc(slot: int) = inc deletes
+let normalBegin = driver.beginQuery
+let normalEnd = driver.endQuery
+let normalRead = driver.milliseconds
+for failure in 0..2:
+  driver.beginQuery = normalBegin
+  driver.endQuery = normalEnd
+  driver.milliseconds = normalRead
+  if failure == 0:
+    driver.beginQuery = proc(slot: int) = raise newException(ValueError,"begin failed")
+  elif failure == 1:
+    driver.endQuery = proc() = raise newException(ValueError,"end failed")
+  else:
+    driver.milliseconds = proc(slot: int): float64 =
+      if slot == 1: raise newException(ValueError,"read failed")
+      3.0
+  timer = initGpuTimer(driver)
+  alias = timer
+  rejected = false
+  try:
+    discard timer.beginSample(1)
+    timer.endSample()
+    if failure == 2:
+      discard timer.beginSample(2)
+      timer.endSample()
+      ready[0] = true
+      ready[1] = true
+      timer.poll(batch)
+  except ValueError: rejected = true
+  doAssert rejected and not alias.supported
+  if failure == 2: doAssert batch.count == 0
+  let before = deletes
+  alias.dispose()
+  doAssert deletes == before # uncertain driver state: no more GL calls
+  rejected = false
+  try: discard alias.beginSample(3)
+  except ValueError: rejected = true
+  doAssert rejected
+echo "Shared timer aliases / rollback exactly once / callback failure isolation PASS"

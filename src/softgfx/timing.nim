@@ -1,4 +1,4 @@
-## Nonblocking, bounded GPU query queue. Single owner/current context; do not
+## Nonblocking bounded queue. Shared timer identity, explicit current context; do not
 ## interleave elapsed queries from other profilers. No clock or GL enums here.
 import std/math
 const TimerSlots* = 4
@@ -18,7 +18,7 @@ type
   GpuBatch* = object
     count*: int
     samples*: array[TimerSlots,GpuSample]
-  GpuTimer* = object
+  GpuTimer* = ref object
     driver: TimerDriver
     alive, active: bool
     head, pending: int
@@ -29,7 +29,19 @@ type
 proc bump(x: var int) =
   if x < high(int): inc x
 
+proc destroyPool(driver: TimerDriver; count: int): bool =
+  ## Each slot attempted once, even if another delete fails. No GL calls after loss.
+  result = true
+  for slot in 0..<count:
+    try:
+      if driver.lost(): return result
+    except:
+      return false # context state uncertain; do not issue more calls
+    try: driver.destroy(slot)
+    except: result = false
+
 proc initGpuTimer*(driver: TimerDriver): GpuTimer =
+  new(result)
   result.alive = true
   if not driver.supported: return
   if driver.create == nil or driver.destroy == nil or driver.beginQuery == nil or
@@ -38,20 +50,29 @@ proc initGpuTimer*(driver: TimerDriver): GpuTimer =
     raise newException(ValueError,"Incomplete timer driver")
   result.driver = driver
   var created = 0
+  var complete = false
   try:
     for slot in 0..<TimerSlots:
-      if not driver.create(slot):
-        for old in 0..<created: driver.destroy(old)
-        return # allocation unavailable: CPU-only, no partial query pool
+      if not driver.create(slot): break
       inc created
+    complete = created == TimerSlots
   except:
-    for old in 0..<created: driver.destroy(old)
+    discard destroyPool(driver,created) # preserve original create exception
     raise
+  if not complete:
+    if not destroyPool(driver,created):
+      raise newException(ValueError,"Timer allocation rollback failed")
+    return # CPU-only; rollback is OUTSIDE create's exception handler
   result.supported = true
 
 proc abandon*(t: var GpuTimer) =
-  ## Context lost: NEVER issue end/delete calls on invalid handles.
-  t = default(GpuTimer)
+  ## Context lost/driver failure: no end/delete. All aliases become invalid.
+  if t.isNil: return
+  t.alive = false
+  t.active = false
+  t.supported = false
+  t.head = 0
+  t.pending = 0
 
 proc invalidate(t: var GpuTimer) =
   t.head = 0
@@ -68,55 +89,70 @@ proc healthy(t: var GpuTimer): bool =
   true
 
 proc beginSample*(t: var GpuTimer; frame: int): bool =
-  if not t.alive: raise newException(ValueError,"Timer is disposed/lost")
+  if t.isNil or not t.alive: raise newException(ValueError,"Timer is disposed/lost")
   if t.active: raise newException(ValueError,"Timer query already active")
-  if not t.supported or not t.healthy(): return false
-  if t.pending == TimerSlots:
-    bump(t.skipped) # never wait, flush, finish or allocate another query
-    return false
-  let slot = (t.head+t.pending) mod TimerSlots
-  t.frames[slot] = frame
-  t.driver.beginQuery(slot)
-  t.active = true
-  true
+  try:
+    if not t.supported or not t.healthy(): return false
+    if t.pending == TimerSlots:
+      bump(t.skipped) # never wait, flush, finish or allocate another query
+      return false
+    let slot = (t.head+t.pending) mod TimerSlots
+    t.frames[slot] = frame
+    t.driver.beginQuery(slot)
+    t.active = true
+    return true
+  except:
+    t.abandon() # begin may have reached GL before throwing; no blind retry
+    raise
 
 proc endSample*(t: var GpuTimer) =
-  if not t.active: return
-  if t.driver.lost():
+  if t.isNil or not t.active: return
+  try:
+    if t.driver.lost():
+      t.abandon()
+      return
+    t.active = false # never retry a possibly completed end call
+    t.driver.endQuery()
+    inc t.pending
+  except:
     t.abandon()
-    return
-  t.driver.endQuery()
-  t.active = false
-  inc t.pending
+    raise
 
 proc poll*(t: var GpuTimer; batch: var GpuBatch) =
   batch.count = 0
+  if t.isNil: return
   if t.active: raise newException(ValueError,"Poll outside query scope")
-  if not t.alive or not t.supported or not t.healthy(): return
-  while t.pending > 0:
-    if not t.driver.available(t.head): break
-    let ms = t.driver.milliseconds(t.head) # ONLY after availability
-    if classify(ms) notin {fcNan,fcInf,fcNegInf} and ms > 0:
-      batch.samples[batch.count] = GpuSample(frame:t.frames[t.head],ms:ms)
-      inc batch.count
-    t.head = (t.head+1) mod TimerSlots
-    dec t.pending
-  # A disjoint discovered while retrieving invalidates the ENTIRE batch.
-  if not t.healthy(): batch.count = 0
+  try:
+    if not t.alive or not t.supported or not t.healthy(): return
+    while t.pending > 0:
+      if not t.driver.available(t.head): break
+      let ms = t.driver.milliseconds(t.head) # ONLY after availability
+      if classify(ms) notin {fcNan,fcInf,fcNegInf} and ms > 0:
+        batch.samples[batch.count] = GpuSample(frame:t.frames[t.head],ms:ms)
+        inc batch.count
+      t.head = (t.head+1) mod TimerSlots
+      dec t.pending
+    if not t.healthy(): batch.count = 0
+  except:
+    batch.count = 0 # never expose a partial batch after failed retrieval
+    t.abandon()
+    raise
 
 proc reset*(t: var GpuTimer) =
-  ## Configuration/visibility change. Results in flight are discarded, not waited
-  ## for. GL permits reusing query objects; begin resets result availability.
+  ## Discard results without waiting; alias scopes share the same active query.
+  if t.isNil: return
   t.endSample()
   if t.alive: t.invalidate()
 
 proc dispose*(t: var GpuTimer) =
-  if not t.alive: return
-  if t.supported:
-    if t.driver.lost():
-      t.abandon()
-      return
-    t.endSample()
-    if not t.alive: return # loss may have been observed by endSample
-    for slot in 0..<TimerSlots: t.driver.destroy(slot)
-  t = default(GpuTimer)
+  if t.isNil or not t.alive: return
+  t.alive = false # aliases cannot start new work during cleanup
+  try:
+    if t.supported:
+      if t.driver.lost(): return
+      t.endSample()
+      if not t.supported: return # endSample observed context loss
+      if not destroyPool(t.driver,TimerSlots):
+        raise newException(ValueError,"Timer pool cleanup failed")
+  finally:
+    t.abandon()

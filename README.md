@@ -308,3 +308,7 @@ float32 snapshot и пропускают одинаковые submissions. Ст�
 state и stats. `dispose` через любой alias инвалидирует все ссылки; повторный
 вызов безопасен. При context loss используйте `abandon`, затем новый `init…`.
 Это изменение value-copy semantics; [контракт и границы](docs/validation-lifetime.md).
+
+`GpuTimer` также использует shared identity: aliases разделяют очередь и scope,
+а dispose/abandon инвалидируют их вместе. Callback failure прекращает работу timer,
+не вызывая слепых GL retries. [Timer lifecycle и ограничения](docs/validation-timer-lifetime.md).

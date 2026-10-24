@@ -205,21 +205,25 @@ publish(drawFrame)
 # Lifecycle diagnostic for the browser regression harness; no per-frame work.
 var retiredRenderer: Renderer
 var retiredPipeline: Pipeline
+var retiredTimer: GpuTimer
 proc publishLifetime(callback: proc(): bool) {.importjs: "(globalThis.softgfxRetiredHandlesRejected = #)".}
 publishLifetime(proc(): bool =
-  if retiredRenderer.isNil or retiredPipeline.isNil: return false
-  var rendererRejected, pipelineRejected: bool
+  if retiredRenderer.isNil or retiredPipeline.isNil or retiredTimer.isNil: return false
+  var rendererRejected, pipelineRejected, timerRejected: bool
   try: retiredRenderer.render(1,1)
   except ValueError: rendererRejected = true
   try: discard retiredPipeline.beginFrame(1,1)
   except ValueError: pipelineRejected = true
-  rendererRejected and pipelineRejected)
+  try: discard retiredTimer.beginSample(1)
+  except ValueError: timerRejected = true
+  rendererRejected and pipelineRejected and timerRejected)
 onEvent(surface, "webglcontextlost", proc(e: JsObject) =
   e.preventDefault()
   lost = true
   lastMs = 0
   retiredRenderer = renderer
   retiredPipeline = pipeline
+  retiredTimer = timer
   renderer.abandon()
   cars.abandon()
   sky.abandon()

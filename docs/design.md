@@ -181,3 +181,10 @@ Renderer/Pipeline переведены на shared reference identity: aliases �
 cache/state/lifetime. Dispose/abandon инвалидируют их вместе; explicit cleanup
 остаётся обязанностью host, не GC. Timer pool и context identity/interleaving
 ограничения пока отдельные задачи. См. validation-lifetime.md.
+
+## Уточнение после пятнадцатого среза
+
+GpuTimer разделяет identity между aliases; rollback cleanup не повторяет deletion
+после исключения. Driver callback failures закрывают timer и подавляют partial
+samples. Global context/query arbiter не добавлен: отдельные драйверы всё ещё
+нельзя interleave. См. validation-timer-lifetime.md.
