@@ -63,6 +63,7 @@ module.exports = async function benchmark(browser, engine) {
    else assert(sample.uploadBytes>0);
    report.submission.push({...sample,forcedFallback:fallback});
   }
+  await require('./gpu_evidence.cjs').collect(browser,engine);
   assert.deepEqual(errors,[]);report.passed=true;
   console.log('Release CPU benchmark PASS:',engine,report.rows.length,'cases');
  } catch(e) {report.error=String(e);throw e;}

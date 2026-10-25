@@ -373,3 +373,8 @@ median/p95 и raw samples. В `?debug` доступен `softgfxDebug.setBudgets
 WebGL instance uploads используют общий Float32Array shadow без дополнительной
 staging copy в renderer path. Release reports дополнены static/moving demo CPU
 submission samples (не GPU FPS). [Контракт](docs/validation-direct-shadow.md).
+
+CI также сохраняет `gpu-evidence-ENGINE.json`: host display metadata, фактический
+WebGL renderer и результаты nonblocking GPU timer queries во всех трёх engines.
+Наличие GPU runner и наличие timer samples не означают hardware acceptance:
+[как читать evidence](docs/validation-gpu-evidence.md).

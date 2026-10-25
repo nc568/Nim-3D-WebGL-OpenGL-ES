@@ -94,6 +94,7 @@ jobs:
             build/timing-report.json
             build/workload-browser.json
             build/release-chromium.json
+            build/gpu-evidence-chromium.json
 
   native:
     name: GCC + LLVM + cproc-QBE / GLES2-3
@@ -184,7 +185,6 @@ jobs:
         shell: bash
         env:
           BROWSER_ENGINE: ${{ matrix.engine }}
-          LIBGL_ALWAYS_SOFTWARE: '1'
         run: |
           set -euo pipefail
           node tools/serve_tests.cjs >build/cross-server.log 2>&1 &
@@ -192,7 +192,7 @@ jobs:
           trap 'kill "$server" 2>/dev/null || true' EXIT
           node tools/wait_http.cjs http://127.0.0.1:8080/gpu-test.html
           if [[ "$RUNNER_OS" == Linux ]]; then
-            xvfb-run -a node tools/cross_browser_test.cjs 2>&1 | tee build/cross-browser.log
+            LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a node tools/cross_browser_test.cjs 2>&1 | tee build/cross-browser.log
           else
             node tools/cross_browser_test.cjs 2>&1 | tee build/cross-browser.log
           fi
@@ -216,6 +216,7 @@ jobs:
           retention-days: 14
           path: |
             build/release-*.json
+            build/gpu-evidence-*.json
             build/cross-*.json
             build/cross-*.log
             build/debug-*.json
