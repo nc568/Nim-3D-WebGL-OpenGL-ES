@@ -1,0 +1,11 @@
+const assert=require('assert/strict'),{installResourceTracker}=require('../tools/resource_tracker.cjs');
+const gl={createBuffer:()=>({}),deleteBuffer(){}};
+const create=gl.createBuffer,remove=gl.deleteBuffer;
+const t=installResourceTracker(gl),a=gl.createBuffer(),b=gl.createBuffer();
+assert.equal(t.snapshot().resources[0].peak,2);
+gl.deleteBuffer(a);gl.deleteBuffer(null);gl.deleteBuffer(b);
+assert.equal(t.snapshot().resources[0].live,0);
+assert.equal(t.snapshot().resources[0].deleted,2);
+gl.deleteBuffer(a);assert.equal(t.snapshot().violations.length,1);
+t.restore();assert.equal(gl.createBuffer,create);assert.equal(gl.deleteBuffer,remove);
+console.log('GL resource tracker balance / duplicate delete / restoration PASS');

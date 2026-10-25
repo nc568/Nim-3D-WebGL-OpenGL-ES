@@ -45,3 +45,11 @@ Physical devices — отдельный этап после integration release;
 зависит от доступных устройств/runner'ов и результатов. Shadow maps/bloom/FSR/MSAA,
 Android/iOS native host, Vulkan/Metal не включены в эти 6–10 пакетов, если отдельно
 не пересмотрен scope. UI toolkit и network synchronization остаются вне graphics.
+
+### Обновление пакета 29
+
+Добавлены provisional car/territory stress presets и короткий browser resource soak
+с full-batch pixel oracle и replay. Это закрывает часть scaffolding workloads/soak,
+но не согласование фактических игровых counts, многочасовой soak и game integration.
+Оценка 65–75% остаётся предварительной; автоматически повышать её за новый fixture
+нельзя. Подробности: validation-game-soak.md.

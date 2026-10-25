@@ -68,6 +68,7 @@ module.exports = async function benchmark(browser, engine) {
    report.submission.push({...sample,forcedFallback:fallback});
   }
   await require('./gpu_evidence.cjs').collect(browser,engine);
+  await require('./soak_test.cjs')(browser,engine);
   assert.deepEqual(errors,[]);report.passed=true;
   console.log('Release CPU benchmark PASS:',engine,report.rows.length,'cases');
  } catch(e) {report.error=String(e);throw e;}

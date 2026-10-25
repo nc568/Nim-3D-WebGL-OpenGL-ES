@@ -386,3 +386,8 @@ Camera matrices кешируются отдельно для каждого rend
 Оценка готовности, критерии первого integration release и оставшиеся этапы:
 [release-readiness](docs/release-readiness.md). Post-pass также пропускает неизменённые
 uniform uploads; [контракт](docs/validation-post-cache.md).
+
+Короткий browser soak теперь использует car/territory presets на 64/256/1024 объекта:
+culling/full-batch pixel parity, quality changes и повторное создание ресурсов.
+Проверяется баланс GL handles, не физическая VRAM/JS heap. Нагрузки предварительные:
+[методика](docs/validation-game-soak.md).

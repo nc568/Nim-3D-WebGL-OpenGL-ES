@@ -78,3 +78,8 @@ node tests/gpu_evidence.cjs
 node tools/check_js_hotpath.cjs build/test_webgl.js camera
 
 node tools/check_js_hotpath.cjs build/test_webgl.js postcache
+
+"$NIM" js -d:release -o:build/browser_soak.js tests/browser_soak.nim
+printf '<!doctype html><meta charset="utf-8"><canvas id="scene" width="192" height="128"></canvas><script src="browser_soak.js"></script>' > build/soak.html
+
+node tests/resource_tracker.cjs
