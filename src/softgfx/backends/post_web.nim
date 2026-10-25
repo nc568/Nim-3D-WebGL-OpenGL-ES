@@ -4,6 +4,7 @@ type
   PostTarget* = object
     framebuffer, color, depth: JsObject
   PostPass* = object
+    uniformCache*: PostUniformCache
     program: Program
     buffer: Buffer
     invSize, fxaa, dither, exposure, vignette: JsObject
@@ -53,6 +54,7 @@ proc destroyPost*(gl: Context; p: var PostPass) =
   p = default(PostPass)
 
 proc createPost*(gl: Context): PostPass =
+  new(result.uniformCache)
   try:
     result.program = gl.createProgram(PostVertex,PostFragment)
     result.buffer = gl.createBuffer(@[-1'f32,-1,0, 3,-1,0, -1,3,0])
@@ -87,11 +89,24 @@ proc present*(gl: Context; p: PostPass; t: PostTarget; w,h,rw,rh: int; s: PostSe
   gl.useProgram(p.program)
   gl.activeTexture(0x84C0)
   gl.bindTexture(0x0DE1,t.color)
-  gl.uniform2f(p.invSize,1.0/float(rw),1.0/float(rh))
-  gl.uniform1i(p.fxaa,ord(s.fxaa))
-  gl.uniform1i(p.dither,ord(s.dither))
-  gl.uniform1f(p.exposure,s.exposure)
-  gl.uniform1f(p.vignette,s.vignette)
+  let mask = postUniformChanges(p.uniformCache,rw,rh,s)
+  p.uniformCache.valid = false # exceptions require full resync
+  if (mask and 1) != 0:
+    gl.uniform2f(p.invSize,1.0/float(rw),1.0/float(rh))
+    notePostUniform(p.uniformCache)
+  if (mask and 2) != 0:
+    gl.uniform1i(p.fxaa,ord(s.fxaa))
+    notePostUniform(p.uniformCache)
+  if (mask and 4) != 0:
+    gl.uniform1i(p.dither,ord(s.dither))
+    notePostUniform(p.uniformCache)
+  if (mask and 8) != 0:
+    gl.uniform1f(p.exposure,s.exposure)
+    notePostUniform(p.uniformCache)
+  if (mask and 16) != 0:
+    gl.uniform1f(p.vignette,s.vignette)
+    notePostUniform(p.uniformCache)
+  retainPostUniforms(p.uniformCache,rw,rh,s,mask)
   for i in 0..6:
     gl.vertexAttribDivisor(i,0)
     if i > 0: gl.disableVertexAttribArray(i)

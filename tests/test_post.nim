@@ -29,3 +29,29 @@ proc rangeClass(x: int): int =
   else: 3
 for x in [0,1,5,6,99,100,100000,100001]:
   doAssert rangeClass(x) == (if x >= 1 and x <= 5: 1 elif x >= 100 and x <= 100000: 2 else: 3)
+
+suite "post uniform cache":
+  test "field masks, canonical equality, explicit invalidation":
+    var c: PostUniformCache
+    new(c)
+    var s = defaultPost()
+    check postUniformChanges(c,64,64,s) == 31
+    retainPostUniforms(c,64,64,s,31)
+    check postUniformChanges(c,64,64,s) == 0
+    s.scale = 0.8; s.enabled = false # not uniforms
+    check postUniformChanges(c,64,64,s) == 0
+    check postUniformChanges(c,63,64,s) == 1
+    s.fxaa = false
+    check postUniformChanges(c,64,64,s) == 2
+    s.dither = false
+    check postUniformChanges(c,64,64,s) == 6
+    s.exposure = 0.5; s.vignette = 0.2
+    check postUniformChanges(c,63,64,s) == 31
+    retainPostUniforms(c,63,64,s,31)
+    s.exposure += float32(pow(10.0,-10.0))
+    check postUniformChanges(c,63,64,s) == 0
+    c.valid = false
+    check postUniformChanges(c,63,64,s) == 31
+    c.calls = high(int); c.skips = high(int)
+    notePostUniform(c); retainPostUniforms(c,63,64,s,0)
+    check c.calls == high(int) and c.skips == high(int)

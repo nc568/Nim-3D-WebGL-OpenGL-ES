@@ -76,3 +76,5 @@ printf '<!doctype html><meta charset="utf-8"><title>CPU release workloads</title
 node tests/gpu_evidence.cjs
 
 node tools/check_js_hotpath.cjs build/test_webgl.js camera
+
+node tools/check_js_hotpath.cjs build/test_webgl.js postcache

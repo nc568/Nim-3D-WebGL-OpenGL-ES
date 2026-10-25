@@ -37,6 +37,16 @@ proc renderSize*(p: Pipeline): SurfaceSize =
   p.scopes.requireContext()
   (p.rw,p.rh)
 
+proc postUniformStats*(p: Pipeline): tuple[calls, skips: int] =
+  if p.isNil or not p.alive: raise newException(ValueError,"Pipeline is disposed")
+  if p.postReady: (p.post.uniformCache.calls,p.post.uniformCache.skips)
+  else: (0,0)
+
+proc invalidatePostUniforms*(p: Pipeline) =
+  ## Use after external mutation of this post program's five dynamic uniforms.
+  if p.isNil or not p.alive: raise newException(ValueError,"Pipeline is disposed")
+  if p.postReady: p.post.uniformCache.valid = false
+
 proc beginFrameImpl(p: var Pipeline; width,height: int;
                  settings = defaultPost()): bool =
   ## Returns false for a minimized/zero-sized surface. Scene draws within this

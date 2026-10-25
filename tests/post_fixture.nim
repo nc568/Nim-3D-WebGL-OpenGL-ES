@@ -2,7 +2,77 @@
 import softgfx, softgfx/geometry
 import instance_fixture, fxaa_reference
 
+when defined(js):
+  proc trackPost(gl: Context) {.importjs: """(function(g){const names=['uniform1f','uniform1i','uniform2f'],old=names.map(n=>g[n]);g._postCalls=0;g._postFail=0;g._postAfter=false;g._restorePost=()=>names.forEach((n,i)=>g[n]=old[i]);names.forEach((n,i)=>g[n]=function(...a){g._postCalls++;const fail=--g._postFail===0;if(fail&&!g._postAfter)throw Error('post before');const v=old[i].apply(g,a);if(fail)throw Error('post after');return v;});})(#)""".}
+  proc postCalls(gl: Context): int {.importjs: "#._postCalls".}
+  proc failPost(gl: Context; after: bool) {.importjs: "(function(g,a){g._postFail=2;g._postAfter=a;})(#,#)".}
+  proc untrackPost(gl: Context) {.importjs: "#._restorePost()".}
+
+proc cachedFrame(p: var Pipeline; r: var Renderer; s: PostSettings) =
+  doAssert p.beginFrame(64,64,s)
+  let size = p.renderSize()
+  r.render(size.width,size.height,clear=false)
+  p.endFrame()
+
+proc runPostCacheProbe(ctx: Context; caps: Capabilities; read: FrameReader) =
+  if caps.api notin {webgl2,gles3}: return
+  var mesh: MeshData
+  mesh.addBox([0'f32,0,0],[0.63'f32,0.51,0.2],[0.8'f32,0.3,0.1])
+  var r = initRenderer(ctx,caps,mesh)
+  var p = initPipeline(ctx,caps)
+  var s = defaultPost()
+  p.cachedFrame(r,s)
+  let initial = read()
+  doAssert p.postUniformStats == (5,0)
+  when defined(js): trackPost(ctx)
+  try:
+    for i in 0..<100: p.cachedFrame(r,s)
+    doAssert p.postUniformStats == (5,500) and read() == initial
+    when defined(js): doAssert postCalls(ctx) == 0
+    for field in 0..<5:
+      let before = p.postUniformStats.calls
+      case field
+      of 0: s.exposure = 0.6
+      of 1: s.vignette = 0.4
+      of 2: s.fxaa = false
+      of 3: s.dither = false
+      else: s.scale = 0.8
+      p.cachedFrame(r,s)
+      doAssert p.postUniformStats.calls == before+1
+      let partial = read()
+      var alias = p
+      alias.invalidatePostUniforms()
+      p.cachedFrame(r,s)
+      doAssert p.postUniformStats.calls == before+6 and read() == partial
+    when defined(js):
+      for after in [false,true]:
+        p.invalidatePostUniforms()
+        failPost(ctx,after)
+        var rejected = false
+        try: p.cachedFrame(r,s)
+        except: rejected = true
+        doAssert rejected
+        let attempts = postCalls(ctx)
+        p.cachedFrame(r,s)
+        doAssert postCalls(ctx) == attempts+5
+        let retried = read()
+        p.invalidatePostUniforms()
+        p.cachedFrame(r,s)
+        doAssert read() == retried
+    s.enabled = false
+    let before = p.postUniformStats
+    p.cachedFrame(r,s)
+    doAssert p.postUniformStats == before
+    s.enabled = true
+    p.cachedFrame(r,s)
+    doAssert p.postUniformStats.calls == before.calls
+  finally:
+    when defined(js): untrackPost(ctx)
+    p.dispose(); r.dispose()
+  echo "Post uniform cache / 500 skipped calls / field masks / force parity / retry PASS: ",caps.api
+
 proc runPostProbe*(ctx: Context; caps: Capabilities; read: FrameReader) =
+  runPostCacheProbe(ctx,caps,read)
   var mesh: MeshData
   mesh.addBox([0'f32,0,0],[0.63'f32,0.51,0.2],[0.8'f32,0.3,0.1])
   var r = initRenderer(ctx,caps,mesh.indexed())

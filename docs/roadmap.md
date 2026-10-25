@@ -43,3 +43,10 @@ Network jitter/authoritative synchronization — соседний host/gameplay 
 Добавление Vulkan/Metal не должно нарушать pure-JS/WebGL1 и cproc/QBE regression paths.
 Реальные device tests требуют доступного устройства/runner: CI software results нельзя
 помечать как пройденные hardware acceptance criteria.
+
+## Первый integration release и оценка оставшегося объёма
+
+Актуальные границы, ориентировочная готовность и проверяемые критерии вынесены в
+[release-readiness.md](release-readiness.md). Release CPU workloads, GPU evidence,
+submission observations и camera/post uniform caches уже добавлены; следующий
+крупный пробел — workload/soak под реальные игровые ограничения и интеграция host.

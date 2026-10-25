@@ -127,6 +127,11 @@ proc timingReport(): JsObject =
   result.instanceMode = nil
   if not lost: result.instanceMode = cstring($cars.instanceMode)
   result.targetBytes = pipeline.stats.allocatedBytes
+  result.postUniformCalls = 0
+  result.postUniformSkips = 0
+  if not lost:
+    result.postUniformCalls = pipeline.postUniformStats.calls
+    result.postUniformSkips = pipeline.postUniformStats.skips
   result.cameraUploads = 0
   result.cameraSkips = 0
   if not lost:

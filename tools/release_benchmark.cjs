@@ -51,6 +51,7 @@ module.exports = async function benchmark(browser, engine) {
      api:after.api,mode:after.instanceMode,post:after.postEnabled,drawCalls:after.drawCalls,
      targetBytes:after.targetBytes,uploadBytes:after.instanceUploadBytes-before.instanceUploadBytes,
      updates:after.instanceUpdates-before.instanceUpdates,
+     postUniformCalls:after.postUniformCalls-before.postUniformCalls,postUniformSkips:after.postUniformSkips-before.postUniformSkips,
      cameraUploads:after.cameraUploads-before.cameraUploads,cameraSkips:after.cameraSkips-before.cameraSkips,
      medianMs:sorted[20],p95Ms:sorted[38],rawMs:times};
    },moving);
@@ -58,6 +59,7 @@ module.exports = async function benchmark(browser, engine) {
    if(fallback)assert.equal(sample.mode,'fallbackDraws');
    assert(sample.rawMs.every(v=>Number.isFinite(v)&&v>=0));
    assert(sample.drawCalls>0);
+   assert.equal(sample.postUniformCalls,0);assert.equal(sample.postUniformSkips,legacy?0:205);
    assert.equal(sample.cameraUploads,0);assert.equal(sample.cameraSkips,82);
    if(!moving)assert.equal(sample.updates,0);
    else assert(sample.updates>0);

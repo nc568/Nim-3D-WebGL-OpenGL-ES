@@ -39,3 +39,36 @@ proc scaledSize*(width,height: int; scale: float32): SurfaceSize =
   if width == 0 or height == 0: return (0,0)
   let units = int(round(float64(scale)*1000))
   (max(1,(width*units+500) div 1000), max(1,(height*units+500) div 1000))
+
+# Internal per-program uniform cache, shared by backend PostPass copies.
+type PostUniformCache* = ref object
+  valid*: bool
+  width, height: int
+  fxaa, dither: bool
+  exposure, vignette: float32
+  calls*, skips*: int
+
+when defined(js):
+  proc postFloat(value: float32): float32 {.importjs: "Math.fround(#)".}
+else:
+  func postFloat(value: float32): float32 = value
+
+proc postUniformChanges*(c: PostUniformCache; w,h: int; s: PostSettings): int =
+  ## Validated settings/dimensions only; bits: invSize/fxaa/dither/exposure/vignette.
+  if not c.valid: return 31
+  if c.width != w or c.height != h: result = result or 1
+  if c.fxaa != s.fxaa: result = result or 2
+  if c.dither != s.dither: result = result or 4
+  if c.exposure != postFloat(s.exposure): result = result or 8
+  if c.vignette != postFloat(s.vignette): result = result or 16
+
+proc notePostUniform*(c: PostUniformCache) =
+  if c.calls < high(int): inc c.calls
+
+proc retainPostUniforms*(c: PostUniformCache; w,h: int; s: PostSettings; mask: int) =
+  c.width = w; c.height = h
+  c.fxaa = s.fxaa; c.dither = s.dither
+  c.exposure = postFloat(s.exposure); c.vignette = postFloat(s.vignette)
+  for bit in [1,2,4,8,16]:
+    if (mask and bit) == 0 and c.skips < high(int): inc c.skips
+  c.valid = true

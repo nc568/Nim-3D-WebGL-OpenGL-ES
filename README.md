@@ -382,3 +382,7 @@ WebGL renderer и результаты nonblocking GPU timer queries во все
 Camera matrices кешируются отдельно для каждого renderer/program: неподвижная
 камера не вызывает повторный uniform upload. Доступны `cameraStats` и явный
 `invalidateCamera()` для внешнего GL-кода. [Контракт](docs/validation-camera-cache.md).
+
+Оценка готовности, критерии первого integration release и оставшиеся этапы:
+[release-readiness](docs/release-readiness.md). Post-pass также пропускает неизменённые
+uniform uploads; [контракт](docs/validation-post-cache.md).
