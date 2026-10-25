@@ -4,7 +4,7 @@ const current={sourceRevision:'a'.repeat(40),bundleSha256:'b'.repeat(64),runnerS
 const base=defaults(current);
 assert.equal(base.cases.length,12);assert.equal(base.frames*base.cycles*12,2304);
 const edit=fn=>{const v=structuredClone(base);fn(v);return v;};
-for(const v of [edit(v=>v.extra='x'),edit(v=>v.frames=NaN),edit(v=>v.cycles=1),edit(v=>v.frames=1e9),
+for(const v of [edit(v=>v.extra='x'),edit(v=>v.sourceRevision=['a'.repeat(40)]),edit(v=>v.frames=NaN),edit(v=>v.cycles=1),edit(v=>v.frames=1e9),
  edit(v=>v.cases=[]),edit(v=>v.cases[0].url='https://example.com'),edit(v=>v.cases[0].fallback='false'),
  edit(v=>v.cases[0].count=65),edit(v=>v.cases[1]=v.cases[0]),edit(v=>v.generator='unknown'),
  edit(v=>v.bundleSha256='d'.repeat(64)),edit(v=>v.frames=10000)])assert.throws(()=>validate(v,current));

@@ -15,7 +15,7 @@ function keys(value,allowed) {
 function validate(value,current) {
  keys(value,['schemaVersion','generator','sourceRevision','bundleSha256','runnerSha256','frames','cycles','cases']);
  if(value.schemaVersion!==1||value.generator!=='grid-v1')throw Error('Unsupported recipe version/generator');
- if(value.sourceRevision!==null && !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value.sourceRevision))throw Error('Invalid source revision');
+ if(value.sourceRevision!==null && (typeof value.sourceRevision!=='string'||!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value.sourceRevision)))throw Error('Invalid source revision');
  for(const key of ['bundleSha256','runnerSha256']){
   if(typeof value[key]!=='string'||!/^[a-f0-9]{64}$/.test(value[key]))throw Error('Invalid recipe code fingerprint');
   if(current&&value[key]!==current[key])throw Error('Recipe code fingerprint mismatch: '+key);
@@ -42,7 +42,8 @@ function defaults(current,frames=96,cycles=2){
 function load(file,current){
  const stat=fs.statSync(file);
  if(!stat.isFile()||stat.size>maxBytes)throw Error('Recipe must be a regular JSON file <=16 KiB');
- let value;try{value=JSON.parse(fs.readFileSync(file,'utf8'));}catch{throw Error('Invalid soak recipe JSON');}
+ const bytes=fs.readFileSync(file);if(bytes.length>maxBytes)throw Error('Recipe exceeds 16 KiB');
+ let value;try{value=JSON.parse(bytes.toString('utf8'));}catch{throw Error('Invalid soak recipe JSON');}
  return validate(value,current);
 }
 module.exports={identity,validate,defaults,load,maxFrames};
