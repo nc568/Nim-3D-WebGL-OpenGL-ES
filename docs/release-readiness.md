@@ -53,3 +53,9 @@ Android/iOS native host, Vulkan/Metal не включены в эти 6–10 п�
 но не согласование фактических игровых counts, многочасовой soak и game integration.
 Оценка 65–75% остаётся предварительной; автоматически повышать её за новый fixture
 нельзя. Подробности: validation-game-soak.md.
+
+### Обновление пакета 30
+
+Добавлены opt-in inspector и bounded diagnostic captures с UI/export regression
+в трёх browser engines. Это ещё не deterministic game replay: host snapshot/input
+contract и реальные игровые workload limits по-прежнему требуют согласования.

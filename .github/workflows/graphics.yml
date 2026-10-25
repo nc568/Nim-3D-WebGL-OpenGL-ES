@@ -96,6 +96,7 @@ jobs:
             build/release-chromium.json
             build/gpu-evidence-chromium.json
             build/soak-chromium.json
+            build/inspector-chromium.json
 
   native:
     name: GCC + LLVM + cproc-QBE / GLES2-3
@@ -219,6 +220,7 @@ jobs:
             build/release-*.json
             build/gpu-evidence-*.json
             build/soak-*.json
+            build/inspector-*.json
             build/cross-*.json
             build/cross-*.log
             build/debug-*.json

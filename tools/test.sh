@@ -61,6 +61,7 @@ node tools/check_js_hotpath.cjs build/browser.js culling
 node tools/check_js_hotpath.cjs build/browser.js motion
 cp examples/index.html build/index.html
 cp web/debug-recorder.js build/debug-recorder.js
+cp web/debug-inspector.js build/debug-inspector.js
 if [ -n "${FOSSIL_SRC:-}" ]; then
   "$NIM" js -d:release -d:html --path:"$FOSSIL_SRC" -o:build/ui_overlay.js examples/ui_overlay.nim
   cp examples/ui.html build/ui.html

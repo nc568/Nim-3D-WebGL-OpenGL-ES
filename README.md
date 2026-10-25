@@ -391,3 +391,7 @@ uniform uploads; [контракт](docs/validation-post-cache.md).
 culling/full-batch pixel parity, quality changes и повторное создание ресурсов.
 Проверяется баланс GL handles, не физическая VRAM/JS heap. Нагрузки предварительные:
 [методика](docs/validation-game-soak.md).
+
+В `?debug` доступен сворачиваемый inspector: counters, event filters, budgets и
+последние 4 diagnostic captures с JSON export. Автообновление выключено по умолчанию;
+capture не является полным replay игры. [Инструкция](docs/validation-inspector.md).

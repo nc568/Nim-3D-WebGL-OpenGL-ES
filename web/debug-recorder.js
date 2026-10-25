@@ -5,6 +5,9 @@
   const capacity = 256, ring = new Array(capacity);
   let total = 0, frames = 0, stopped = false, graphics = null;
   const removers = [];
+  const saved = [];
+  let nextCapture = 1;
+  const clone = value => JSON.parse(JSON.stringify(value));
   let budgets = null, previousUpload = null, budgetMask = 0, unknownUpload = false;
   let breachFrames = 0, episodes = 0, unknownFrames = 0;
   const budgetFrame = (draws, uploaded) => {
@@ -51,12 +54,30 @@
         'cpuMedianMs','cpuP95Ms','gpuMedianMs','gpuP95Ms','renderWidth','renderHeight',
         'postUniformCalls','postUniformSkips','drawCalls','cameraUploads','cameraSkips','scale','targetBytes','instanceUploadBytes','instanceUpdates',
         'instanceSkippedUpdates','effectUniformCalls','cullingEnabled','visibleCars',
-        'sourceCars','postEnabled','fxaa','contextLost']) {
+        'sourceCars','postEnabled','fxaa','contextLost','animated','simulationTicks',
+        'simulationStepSeconds','renderAlpha','droppedSimulationSeconds']) {
         const value = source[key];
         if (value === null || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))) result[key] = value;
       }
       return result;
     } catch { return {unavailable:true}; } // export logs even during failed teardown
+  };
+  const settingsSnapshot = () => {
+    const controls = {};
+    for (const id of ['cull-cars','post-enabled','post-fxaa','post-dither','post-scale',
+      'auto-scale','env-sky','env-fog','env-shadows']) {
+      const e = document.getElementById(id);
+      if (!e) continue;
+      if (e.type === 'checkbox') controls[id] = !!e.checked;
+      else if (e.type === 'range' && Number.isFinite(e.valueAsNumber)) controls[id] = e.valueAsNumber;
+    }
+    return {controls, width:canvas && Number.isInteger(canvas.width) ? canvas.width : null,
+      height:canvas && Number.isInteger(canvas.height) ? canvas.height : null};
+  };
+  const downloadValue = (value, filename) => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], {type:'application/json'}));
+    const a = document.createElement('a'); a.href=url; a.download=filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   const api = {
     attach(gl, apiName) {
@@ -90,21 +111,36 @@
     snapshot() {
       const events = [];
       for (let i = Math.max(0, total - capacity); i < total; i++) events.push({...ring[i % capacity]});
-      return {schemaVersion: 1, scope: 'host diagnostics; not GPU timing',
+      return {schemaVersion: 1, scope: 'host diagnostics; not GPU timing', stopped,
         budgets: budgets && {...budgets}, budgetStatus: {mask:budgetMask,breachFrames,episodes,unknownFrames},
         capacity, total, overwritten: Math.max(0,total-capacity), frames,
         userAgent: navigator.userAgent, profile: readProfile(), graphics: graphics && {...graphics, extensions:[...graphics.extensions]}, events};
     },
-    download() {
-      const url = URL.createObjectURL(new Blob([JSON.stringify(api.snapshot(), null, 2)], {type:'application/json'}));
-      const a = document.createElement('a'); a.href=url; a.download='softgfx-debug.json'; a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    capture(label = 'manual') {
+      if (stopped) throw new Error('Recorder stopped');
+      const name = text(label).slice(0,96);
+      const id = nextCapture++;
+      record('capture', name);
+      const value = {captureVersion:1,id,label:name,scope:'Diagnostic snapshot, NOT deterministic game replay',
+        capturedMs:performance.now(),settings:settingsSnapshot(),diagnostics:api.snapshot()};
+      saved.push(clone(value));
+      if (saved.length > 4) saved.shift();
+      return id;
     },
+    captures() { return saved.map(c => ({id:c.id,label:c.label,capturedMs:c.capturedMs})); },
+    getCapture(id) { const c = saved.find(c => c.id === id); return c ? clone(c) : null; },
+    downloadCapture(id) {
+      const c = api.getCapture(id);
+      if (!c) throw new Error('Capture unavailable (possibly evicted)');
+      downloadValue(c,'softgfx-capture-'+c.id+'.json');
+    },
+    download() { downloadValue(api.snapshot(),'softgfx-debug.json'); },
     stop() { stopped = true; for (const remove of removers.splice(0)) remove(); }
   };
   globalThis.softgfxDebug = Object.freeze(api);
   record('session', 'debug enabled');
   const button = document.createElement('button');
+  button.id = 'softgfx-debug-download';
   button.textContent = 'Скачать debug JSON'; button.onclick = () => api.download();
   document.body.appendChild(button);
 })();
