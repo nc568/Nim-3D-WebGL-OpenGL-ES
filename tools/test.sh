@@ -74,3 +74,5 @@ node tests/debug_recorder.cjs
 printf '<!doctype html><meta charset="utf-8"><title>CPU release workloads</title><script src="bench_release.js"></script>' > build/benchmark.html
 
 node tests/gpu_evidence.cjs
+
+node tools/check_js_hotpath.cjs build/test_webgl.js camera

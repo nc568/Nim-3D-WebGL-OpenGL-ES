@@ -87,6 +87,15 @@ proc instanceMode*(r: Renderer): InstanceMode =
   if r.isNil or not r.alive: raise newException(ValueError,"Renderer is disposed")
   r.stream.mode
 
+proc cameraStats*(r: Renderer): tuple[uploads, skips: int] =
+  if r.isNil or not r.alive: raise newException(ValueError,"Renderer is disposed")
+  (r.matrixBinding.uploads,r.matrixBinding.skips)
+
+proc invalidateCamera*(r: Renderer) =
+  ## Required if external GL code mutates this program's camera uniform.
+  if r.isNil or not r.alive: raise newException(ValueError,"Renderer is disposed")
+  backend.invalidateMatrix(r.matrixBinding)
+
 proc updateInstances*(r: var Renderer; items: openArray[Instance]) =
   if r.isNil or not r.alive: raise newException(ValueError, "Renderer is disposed")
   if r.instanceCapacity == 0: raise newException(ValueError, "Renderer has no instance capacity")

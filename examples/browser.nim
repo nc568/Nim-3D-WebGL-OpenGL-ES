@@ -127,6 +127,11 @@ proc timingReport(): JsObject =
   result.instanceMode = nil
   if not lost: result.instanceMode = cstring($cars.instanceMode)
   result.targetBytes = pipeline.stats.allocatedBytes
+  result.cameraUploads = 0
+  result.cameraSkips = 0
+  if not lost:
+    result.cameraUploads = renderer.cameraStats.uploads+cars.cameraStats.uploads
+    result.cameraSkips = renderer.cameraStats.skips+cars.cameraStats.skips
 publishTiming(timingReport)
 proc refreshTiming() =
   let report = profile.report()

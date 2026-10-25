@@ -1,3 +1,4 @@
+import camera_fixture
 ## Real native pbuffer smoke test. Requires EGL + GLES drivers; no window required.
 import softgfx, softgfx/backends/gles
 import ../examples/scene
@@ -137,6 +138,10 @@ for version in 2..3:
     readPixels(0,0,64,64,0x1908,0x1401,addr result[0]))
   doAssert getError() == 0
   runDirtyProbe(gl,baseline(if version == 2: gles2 else: gles3),proc(): seq[uint8] =
+    result = newSeq[uint8](64*64*4)
+    readPixels(0,0,64,64,0x1908,0x1401,addr result[0]))
+  doAssert getError() == 0
+  runCameraProbe(gl,baseline(if version == 2: gles2 else: gles3),proc(): seq[uint8] =
     result = newSeq[uint8](64*64*4)
     readPixels(0,0,64,64,0x1908,0x1401,addr result[0]))
   doAssert getError() == 0

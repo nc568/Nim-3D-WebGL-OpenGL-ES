@@ -15,8 +15,10 @@ type
     buffer, extension, storage, view: JsObject
     used, first: int
     copied: bool
-  MatrixBinding* = object
+  MatrixBinding* = ref object
     location, data: JsObject
+    valid: bool
+    uploads*, skips*: int
 
 proc acquire*(canvas: JsObject; forceLegacy = false): tuple[ctx: Context, caps: Capabilities] =
   let options = newJsObject()
@@ -118,8 +120,30 @@ proc destroyTerritory*(gl: Context; t: TerritoryBinding) =
 proc matrixStorage(): JsObject {.importjs: "new Float32Array(16)".}
 proc setElement(data: JsObject; i: int; value: float32) {.importjs: "(#[#] = #)".}
 proc matrixBinding*(gl: Context; p: Program): MatrixBinding =
+  new(result)
   result.location = gl.getUniformLocation(p, "uViewProjection")
   result.data = matrixStorage()
+
+proc invalidateMatrix*(binding: MatrixBinding) =
+  if not binding.isNil: binding.valid = false
+
+proc matrixElement(data: JsObject; i: int): float32 {.importjs: "#[#]".}
+proc canonical(value: float32): float32 {.importjs: "Math.fround(#)".}
+proc submitMatrix(gl: Context; binding: MatrixBinding; matrix: Mat4) =
+  if binding.location.isNil: return # shader has no camera uniform (e.g. sky)
+  var changed = not binding.valid
+  for i in 0..15:
+    let value = canonical(matrix[i])
+    if matrixElement(binding.data,i) != value:
+      setElement(binding.data,i,value)
+      changed = true
+  if not changed:
+    if binding.skips < high(int): inc binding.skips
+    return
+  binding.valid = false # failures, even after submission, require retry
+  gl.uniformMatrix4fv(binding.location,false,binding.data)
+  binding.valid = true
+  if binding.uploads < high(int): inc binding.uploads
 
 proc instanceStorage(count: int): JsObject {.importjs: "new Float32Array(#)".}
 proc createInstanceStream*(gl: Context; api: Api; capacity: int; forceFallback: bool): InstanceStream =
@@ -192,8 +216,7 @@ proc prepare(gl: Context; p: Program; b: Buffer; count, width, height: int; bind
     gl.clearColor(0.65, 0.74, 0.82, 1.0)
     gl.clear(0x4100)
   gl.useProgram(p)
-  for i in 0..15: setElement(binding.data, i, matrix[i])
-  gl.uniformMatrix4fv(binding.location, false, binding.data)
+  submitMatrix(gl,binding,matrix)
   gl.activeTexture(0x84C0)
   gl.bindTexture(0x0DE1,territory.owners)
   gl.activeTexture(0x84C1)

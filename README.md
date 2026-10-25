@@ -378,3 +378,7 @@ CI также сохраняет `gpu-evidence-ENGINE.json`: host display metada
 WebGL renderer и результаты nonblocking GPU timer queries во всех трёх engines.
 Наличие GPU runner и наличие timer samples не означают hardware acceptance:
 [как читать evidence](docs/validation-gpu-evidence.md).
+
+Camera matrices кешируются отдельно для каждого renderer/program: неподвижная
+камера не вызывает повторный uniform upload. Доступны `cameraStats` и явный
+`invalidateCamera()` для внешнего GL-кода. [Контракт](docs/validation-camera-cache.md).

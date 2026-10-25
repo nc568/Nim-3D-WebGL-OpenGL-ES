@@ -49,7 +49,7 @@
       const source = globalThis.softgfxTiming(), result = {};
       for (const key of ['frames','warmupFrames','cpuSamples','gpuSamples','gpuSupported',
         'cpuMedianMs','cpuP95Ms','gpuMedianMs','gpuP95Ms','renderWidth','renderHeight',
-        'drawCalls','scale','targetBytes','instanceUploadBytes','instanceUpdates',
+        'drawCalls','cameraUploads','cameraSkips','scale','targetBytes','instanceUploadBytes','instanceUpdates',
         'instanceSkippedUpdates','effectUniformCalls','cullingEnabled','visibleCars',
         'sourceCars','postEnabled','fxaa','contextLost']) {
         const value = source[key];

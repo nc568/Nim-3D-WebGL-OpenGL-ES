@@ -12,7 +12,11 @@ type
   TerritoryBinding* = object
     owners, palette: uint32
     modern: bool
-  MatrixBinding* = int32
+  MatrixBinding* = ref object
+    location: int32
+    data: Mat4
+    valid: bool
+    uploads*, skips*: int
   Context* = object
     glUniform4f: proc(location: int32; x,y,z,w: float32) {.cdecl.}
     glGenFramebuffers: proc(count: int32; names: ptr uint32) {.cdecl.}
@@ -292,7 +296,26 @@ proc destroyTerritory*(gl: Context; t: TerritoryBinding) =
   gl.glDeleteTextures(2,addr ids[0])
 
 proc matrixBinding*(gl: Context; p: Program): MatrixBinding =
-  gl.glGetUniformLocation(p, "uViewProjection")
+  new(result)
+  result.location = gl.glGetUniformLocation(p, "uViewProjection")
+
+proc invalidateMatrix*(binding: MatrixBinding) =
+  if not binding.isNil: binding.valid = false
+
+proc submitMatrix(gl: Context; binding: MatrixBinding; matrix: Mat4) =
+  if binding.location < 0: return
+  var changed = not binding.valid
+  for i in 0..15:
+    if binding.data[i] != matrix[i]:
+      binding.data[i] = matrix[i]
+      changed = true
+  if not changed:
+    if binding.skips < high(int): inc binding.skips
+    return
+  binding.valid = false
+  gl.glUniformMatrix4fv(binding.location,1,0,addr binding.data[0])
+  binding.valid = true
+  if binding.uploads < high(int): inc binding.uploads
 
 proc createInstanceStream*(gl: Context; api: Api; capacity: int; forceFallback: bool): InstanceStream =
   if api == gles3 and not forceFallback:
@@ -333,7 +356,7 @@ proc prepare(gl: Context; p: Program; b: Buffer; count, width, height: int; bind
     gl.glClearColor(0.65, 0.74, 0.82, 1)
     gl.glClear(0x4100)
   gl.glUseProgram(p)
-  gl.glUniformMatrix4fv(binding, 1, 0, unsafeAddr matrix[0])
+  submitMatrix(gl,binding,matrix)
   gl.glActiveTexture(0x84C0)
   gl.glBindTexture(0x0DE1,territory.owners)
   gl.glActiveTexture(0x84C1)
