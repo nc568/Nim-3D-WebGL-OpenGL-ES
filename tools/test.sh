@@ -84,3 +84,5 @@ node tools/check_js_hotpath.cjs build/test_webgl.js postcache
 printf '<!doctype html><meta charset="utf-8"><canvas id="scene" width="192" height="128"></canvas><script src="browser_soak.js"></script>' > build/soak.html
 
 node tests/resource_tracker.cjs
+
+node tests/soak_recipe.cjs

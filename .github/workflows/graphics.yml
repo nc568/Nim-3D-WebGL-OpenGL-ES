@@ -5,6 +5,22 @@ on:
     branches: [main, 'arena/**']
   pull_request:
   workflow_dispatch:
+    inputs:
+      soak_frames:
+        description: 'Scenario frames per preset/cycle (not seconds)'
+        type: choice
+        options: ['96', '240', '960']
+        default: '96'
+      soak_cycles:
+        description: 'Resource recreation cycles per preset'
+        type: choice
+        options: ['2', '3', '10']
+        default: '2'
+
+# Explicit dispatch only changes iteration budgets, never runner class/billing tier.
+env:
+  SOAK_FRAMES: ${{ inputs.soak_frames || '96' }}
+  SOAK_CYCLES: ${{ inputs.soak_cycles || '2' }}
 
 # No PAT or repository secrets are needed; no pull_request_target execution.
 permissions:
@@ -96,6 +112,7 @@ jobs:
             build/release-chromium.json
             build/gpu-evidence-chromium.json
             build/soak-chromium.json
+            build/soak-recipe-chromium.json
             build/inspector-chromium.json
 
   native:

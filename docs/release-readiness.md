@@ -59,3 +59,9 @@ Android/iOS native host, Vulkan/Metal не включены в эти 6–10 п�
 Добавлены opt-in inspector и bounded diagnostic captures с UI/export regression
 в трёх browser engines. Это ещё не deterministic game replay: host snapshot/input
 contract и реальные игровые workload limits по-прежнему требуют согласования.
+
+### Обновление пакета 31
+
+Workload recipes фиксируют параметры и code hashes; ручной Actions dispatch
+поддерживает расширенный iteration soak. Это улучшает воспроизводимость тестов,
+но не заменяет game snapshot/replay contract или многочасовую device acceptance.

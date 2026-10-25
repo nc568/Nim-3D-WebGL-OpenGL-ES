@@ -1,30 +1,41 @@
 const fs=require('fs'),assert=require('assert/strict');
 const {installResourceTracker}=require('./resource_tracker.cjs');
+const recipes=require('./soak_recipe.cjs');
 module.exports=async function soak(browser,engine) {
- const frames=Number(process.env.SOAK_FRAMES||96),cycles=Number(process.env.SOAK_CYCLES||2);
- assert(Number.isInteger(frames)&&frames>=48&&frames<=10000);
- assert(Number.isInteger(cycles)&&cycles>=2&&cycles<=100);
- const report={schemaVersion:1,engine,version:await browser.version(),frames,cycles,generator:"grid-v1 (deterministic formulas, no RNG)",
-  scope:'Provisional game-like deterministic short soak; API handle balance, not driver/JS memory proof',passed:false,cases:[]};
+ const current=recipes.identity();
+ if(process.env.SOAK_RECIPE_FILE&&(process.env.SOAK_FRAMES||process.env.SOAK_CYCLES))throw Error('Do not mix recipe and frame/cycle overrides');
+ const recipe=process.env.SOAK_RECIPE_FILE?recipes.load(process.env.SOAK_RECIPE_FILE,current):recipes.defaults(current,Number(process.env.SOAK_FRAMES||96),Number(process.env.SOAK_CYCLES||2));
+ const {frames,cycles}=recipe;
+ fs.writeFileSync(`build/soak-recipe-${engine}.json`,JSON.stringify(recipe,null,2));
+ const report={schemaVersion:2,engine,version:await browser.version(),frames,cycles,recipe,
+  executionRevision:current.sourceRevision,platform:process.platform,arch:process.arch,
+  generator:"grid-v1 (deterministic formulas, no RNG)",
+  scope:'Provisional deterministic soak; API handle balance, not driver/JS memory proof',passed:false,cases:[]};
+ let cursor=null;
  const page=await browser.newPage();page.setDefaultTimeout(120000);
  const errors=[];page.on('pageerror',e=>errors.push(String(e)));
  try {
-  for(const legacy of [false,true]) for(const count of [64,256,1024]) for(const fallback of [false,true]) {
+  for(const [presetIndex,preset] of recipe.cases.entries()) {
+   const {count,fallback}=preset,legacy=preset.api==='webgl1';
+   cursor={presetIndex,cycle:null};
    await page.goto('http://127.0.0.1:8080/soak.html'+(legacy?'?webgl1':''));
    await page.waitForFunction(()=>typeof softgfxSoak==='object');
    await page.evaluate(source=>{
+    globalThis.soakTick=null;
     const gl=document.querySelector('canvas').getContext(new URLSearchParams(location.search).has('webgl1')?'webgl':'webgl2');
     if(!gl)throw Error('Expected WebGL context missing');
     globalThis.soakGL=gl;globalThis.soakTracker=(0,eval)('('+source+')')(gl);
    },installResourceTracker.toString());
    const row={legacy,count,fallback,cycles:[]};report.cases.push(row);
    for(let cycle=0;cycle<cycles;cycle++) {
+    cursor={presetIndex,cycle};
     console.log('Soak cycle:',engine,legacy?'webgl1':'webgl2',count,fallback,cycle);
     const result=await page.evaluate(async ({count,fallback,frames})=>{
      const gl=soakGL,checkpoints=[];let state,firstHash;
      softgfxSoak.start(count,fallback);
      try {
       for(let tick=0;tick<frames;tick++) {
+       globalThis.soakTick=tick;
        try {state=JSON.parse(softgfxSoak.step(tick));}
        catch(e){throw Error('Scenario tick '+tick+': '+String(e));}
        if(gl.getError())throw Error('GL error at tick '+tick);
@@ -66,9 +77,13 @@ module.exports=async function soak(browser,engine) {
    await page.evaluate(()=>soakTracker.restore());
   }
   assert.deepEqual(errors,[]);report.passed=true;
-  console.log('Game-like short soak PASS:',engine,report.cases.length,'presets',frames*cycles*report.cases.length,'frames');
+  report.scenarioFrames=frames*cycles*report.cases.length;
+  report.oracleFrames=report.cases.reduce((total,c)=>total+c.cycles.reduce((n,cycle)=>n+cycle.checkpoints.length,0),0);
+  console.log('::notice title=Soak evidence::'+JSON.stringify({engine,frames,cycles,presets:report.cases.length,scenarioFrames:report.scenarioFrames,oracleFrames:report.oracleFrames,passed:true}));
+  console.log('Game-like soak PASS:',engine,report.cases.length,'presets',frames*cycles*report.cases.length,'frames');
  } catch(e){
-  report.error=String(e);report.pageErrors=errors;
+  report.error=String(e);report.pageErrors=errors;report.cursor=cursor;
+  try {report.failedTick=await page.evaluate(()=>globalThis.soakTick??null);} catch {}
   try {report.failureResources=await page.evaluate(()=>soakTracker.snapshot());} catch {}
   try {await page.screenshot({path:`build/soak-${engine}-failure.png`});} catch {}
   throw e;

@@ -395,3 +395,7 @@ culling/full-batch pixel parity, quality changes и повторное созд�
 В `?debug` доступен сворачиваемый inspector: counters, event filters, budgets и
 последние 4 diagnostic captures с JSON export. Автообновление выключено по умолчанию;
 capture не является полным replay игры. [Инструкция](docs/validation-inspector.md).
+
+Нагрузочный прогон сохраняет проверяемый JSON recipe с code hashes; доступен
+standalone replay и ручные увеличенные budgets в Actions. Это replay test workload,
+не inspector capture/игрового состояния. [Инструкция](docs/validation-soak-recipes.md).
