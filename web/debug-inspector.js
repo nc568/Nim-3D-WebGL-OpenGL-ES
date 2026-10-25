@@ -2,7 +2,7 @@
 (() => {
  'use strict';
  const api=globalThis.softgfxDebug;
- if(!api) return;
+ if(!api||globalThis.softgfxInspector) return;
  let timer=null,disposed=false,previewId=null;
  const listeners=[];
  const element=(tag,text,parent)=>{const e=document.createElement(tag);if(text)e.textContent=text;if(parent)parent.appendChild(e);return e;};
@@ -39,6 +39,7 @@
  const preview=element('pre','',panel);preview.id='softgfx-capture-preview';
  button('softgfx-capture-export','Скачать capture',safely(()=>api.downloadCapture(Number(saved.value))),panel);
  const oldDownload=document.getElementById('softgfx-debug-download');
+ const downloadHome=oldDownload&&{parent:oldDownload.parentNode,next:oldDownload.nextSibling};
  if(oldDownload)panel.appendChild(oldDownload);
  const stop=button('softgfx-inspector-stop','Остановить журнал',()=>{api.stop();pause();refresh();status.textContent='Журнал остановлен. Сохранённые captures доступны для экспорта.';},panel);
  function showCapture(){
@@ -72,7 +73,7 @@
  listen(filter,'change',safely(refresh));listen(saved,'change',safely(showCapture));
  listen(panel,'toggle',()=>{if(panel.open)safely(refresh)();});
  listen(window,'pagehide',pause);
- const dispose=()=>{if(disposed)return;pause();disposed=true;for(const remove of listeners.splice(0))remove();panel.remove();style.remove();if(globalThis.softgfxInspector===handle)delete globalThis.softgfxInspector;};
+ const dispose=()=>{if(disposed)return;pause();disposed=true;for(const remove of listeners.splice(0))remove();if(oldDownload?.parentNode===panel&&downloadHome.parent?.isConnected){const {parent,next}=downloadHome;parent.insertBefore(oldDownload,next?.parentNode===parent?next:null);}panel.remove();style.remove();if(globalThis.softgfxInspector===handle)delete globalThis.softgfxInspector;};
  const handle=Object.freeze({refresh,dispose});
  globalThis.softgfxInspector=handle;
  document.body.appendChild(panel);refresh();

@@ -1,5 +1,6 @@
 ## Controlled CPU-only release benchmark; browser engines execute identical JS.
 import std/[json, algorithm]
+import percentile_benchmark
 import softgfx/[instances, culling, math3d]
 when not defined(release): {.error: "Benchmark requires -d:release".}
 when defined(js):

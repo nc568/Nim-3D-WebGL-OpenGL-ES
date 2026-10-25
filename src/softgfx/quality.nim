@@ -1,28 +1,44 @@
 ## CPU frame-time policy, not GPU timing. Do not feed pauses/background frames.
-import std/[algorithm, math]
+import std/math
 type
   FrameWindow* = object
-    values: array[120, float32]
+    values, ordered: array[120, float32]
     count, cursor: int
   Quality* = object
     scale*: float32
     slow, fast: int
 
+proc windowLowerBound(w: FrameWindow; count: int; value: float32): int =
+  var upper = count
+  while result < upper:
+    let middle = (result+upper) div 2
+    if w.ordered[middle] < value: result = middle+1
+    else: upper = middle
+
 proc add*(w: var FrameWindow; ms: float32; allowZero = false) =
   if ms < 0 or float64(ms) > 3.4028234663852886e38 or (ms == 0 and not allowZero) or classify(ms) in {fcNan, fcInf, fcNegInf}: return
+  var count = w.count
+  if count == w.values.len:
+    let expired = w.values[w.cursor]
+    if expired == ms:
+      w.cursor = (w.cursor+1) mod w.values.len
+      return # identical multiset: no shifts or reordering
+    let at = windowLowerBound(w,count,expired)
+    for i in at..<count-1: w.ordered[i] = w.ordered[i+1]
+    dec count
+  let at = windowLowerBound(w,count,ms)
+  for i in countdown(count-1,at): w.ordered[i+1] = w.ordered[i]
+  w.ordered[at] = ms
   w.values[w.cursor] = ms
   w.cursor = (w.cursor + 1) mod w.values.len
-  w.count = min(w.count + 1, w.values.len)
+  w.count = count+1
 
 proc percentiles*(w: FrameWindow): tuple[median, p95: float32] =
+  ## Exact rolling order statistics, with no per-read copy/allocation/sort.
+  ## add maintains a fixed-capacity sorted multiset (including duplicate values).
   if w.count == 0: return
-  # JS toOpenArray lowers to slice(): sorting that temporary does not sort
-  # the original array. Sort an explicitly sized copy on every backend.
-  var sorted = newSeq[float32](w.count)
-  for i in 0..<w.count: sorted[i] = w.values[i]
-  sort(sorted)
-  result.median = sorted[(w.count-1) div 2]
-  result.p95 = sorted[(w.count * 95 + 99) div 100 - 1]
+  result.median = w.ordered[(w.count-1) div 2]
+  result.p95 = w.ordered[(w.count * 95 + 99) div 100 - 1]
 
 proc initQuality*(): Quality = Quality(scale: 1)
 proc observe*(q: var Quality; ms: float32; target = 16.667'f32) =

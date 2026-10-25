@@ -401,3 +401,5 @@ standalone replay и ручные увеличенные budgets в Actions. Э�
 не inspector capture/игрового состояния. [Инструкция](docs/validation-soak-recipes.md).
 
 - [WebGL2 range upload optimization, regression probes and automatic extended soak](docs/validation-upload-ranges.md)
+- [Rolling profiler statistics and diagnostic lifecycle regressions](docs/validation-percentiles.md)
+- [Host integration contract and acceptance checklist](docs/host-integration-contract.md)

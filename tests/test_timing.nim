@@ -1,3 +1,4 @@
+import percentile_fixture
 import std/math
 import softgfx/[timing, profiling, quality]
 
@@ -343,3 +344,5 @@ try: faultScopes.claim(frameScope,frameOwner)
 except ValueError: rejected = true
 doAssert rejected
 echo "Shared context frame/query arbitration / rejection before driver / recovery isolation PASS"
+
+runPercentileProbe()

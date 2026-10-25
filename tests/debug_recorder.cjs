@@ -88,3 +88,16 @@ const last=c.captures().at(-1).id;
 c.stop();assert.throws(()=>c.capture('after stop'));
 assert(c.getCapture(last));assert.equal(c.snapshot().stopped,true);
 console.log('Bounded diagnostic captures / settings allowlist / isolation / eviction / stop PASS');
+
+// Duplicate host script loads preserve the existing session, including stop state.
+vm.runInNewContext(source,context);
+assert.equal(context.softgfxDebug,d);assert(d.snapshot().stopped);
+assert.equal(window.callbacks.size,0);
+// A rejected download click must still schedule object URL cleanup.
+const downloadBoot=boot('?debug');const dc=downloadBoot.context;let revoked=0,scheduled=0;
+dc.Blob=Blob;dc.URL={createObjectURL:()=> 'blob:test',revokeObjectURL:url=>{assert.equal(url,'blob:test');revoked++;}};
+dc.setTimeout=fn=>{scheduled++;fn();};
+downloadBoot.document.createElement=()=>({click(){throw Error('blocked click');}});
+assert.throws(()=>dc.softgfxDebug.download(),/blocked click/);
+assert.equal(scheduled,1);assert.equal(revoked,1);
+console.log('Duplicate init / stopped session preservation / failed export URL cleanup PASS');

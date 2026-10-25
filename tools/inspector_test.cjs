@@ -9,6 +9,15 @@ module.exports=async function inspectorTest(browser,engine) {
   for(const legacy of [false,true]) {
    await page.goto('http://127.0.0.1:8080/?debug'+(legacy?'&webgl1':''));
    await page.waitForFunction(()=>typeof softgfxRender==='function'&&typeof softgfxInspector==='object');
+   // Loading host scripts twice must not leak a second recorder/panel/listeners.
+   await page.evaluate(()=>{globalThis.originalRecorder=softgfxDebug;globalThis.originalInspector=softgfxInspector;});
+   await page.addScriptTag({url:'http://127.0.0.1:8080/debug-recorder.js'});
+   await page.addScriptTag({url:'http://127.0.0.1:8080/debug-inspector.js'});
+   assert(await page.evaluate(()=>softgfxDebug===originalRecorder&&softgfxInspector===originalInspector&&document.querySelectorAll('#softgfx-inspector').length===1&&document.querySelectorAll('#softgfx-debug-download').length===1));
+   // Inspector borrows the recorder's export button; disposal must return it.
+   await page.evaluate(()=>{softgfxInspector.dispose();globalThis.softgfxInspector?.dispose();});
+   assert(await page.evaluate(()=>!globalThis.softgfxInspector&&!softgfxDebug.snapshot().stopped&&document.getElementById('softgfx-debug-download').parentNode===document.body));
+   await page.addScriptTag({url:'http://127.0.0.1:8080/debug-inspector.js'});
    await page.click('#softgfx-inspector > summary');
    await page.evaluate(()=>{
     const gl=document.querySelector('canvas').getContext(new URLSearchParams(location.search).has('webgl1')?'webgl':'webgl2');
@@ -57,7 +66,7 @@ module.exports=async function inspectorTest(browser,engine) {
    assert(await page.evaluate(()=>inspectorIntervals.size===0&&softgfxDebug.snapshot().stopped&&document.getElementById('softgfx-capture').disabled));
    const snapshot=await page.evaluate(()=>softgfxDebug.snapshot());
    await page.evaluate(()=>{softgfxInspector.dispose();softgfxDebug.mark('ignored');});
-   assert(await page.evaluate(()=>!globalThis.softgfxInspector&&!document.getElementById('softgfx-inspector')&&inspectorIntervals.size===0&&inspectorReads===0&&!inspectorXss));
+   assert(await page.evaluate(()=>!globalThis.softgfxInspector&&!document.getElementById('softgfx-inspector')&&document.getElementById('softgfx-debug-download').parentNode===document.body&&inspectorIntervals.size===0&&inspectorReads===0&&!inspectorXss));
    assert.equal(await page.evaluate(()=>softgfxDebug.snapshot().total),snapshot.total);
    report.cases.push({api:legacy?'webgl1':'webgl2',capture:frozen,passed:true});
   }

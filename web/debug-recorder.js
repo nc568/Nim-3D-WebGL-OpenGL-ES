@@ -1,7 +1,7 @@
 /* Opt-in host diagnostics. No GL interception/readback, storage or network IO. */
 (() => {
   'use strict';
-  if (!new URLSearchParams(location.search).has('debug')) return;
+  if (!new URLSearchParams(location.search).has('debug') || globalThis.softgfxDebug) return;
   const capacity = 256, ring = new Array(capacity);
   let total = 0, frames = 0, stopped = false, graphics = null;
   const removers = [];
@@ -76,8 +76,9 @@
   };
   const downloadValue = (value, filename) => {
     const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], {type:'application/json'}));
-    const a = document.createElement('a'); a.href=url; a.download=filename; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    try {
+      const a = document.createElement('a'); a.href=url; a.download=filename; a.click();
+    } finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
   };
   const api = {
     attach(gl, apiName) {

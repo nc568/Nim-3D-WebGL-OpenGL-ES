@@ -65,3 +65,12 @@ contract и реальные игровые workload limits по-прежнем�
 Workload recipes фиксируют параметры и code hashes; ручной Actions dispatch
 поддерживает расширенный iteration soak. Это улучшает воспроизводимость тестов,
 но не заменяет game snapshot/replay contract или многочасовую device acceptance.
+
+### Обновление пакетов 32–33
+
+WebGL2 dirty ranges используют source-offset uploads без subarray wrappers;
+расширенный 240×3 checkpoint добавлен в обычную CI. Rolling profiler statistics
+переведены на bounded ordered storage с sort-oracle/paired benchmark. Уточнён
+[host integration contract](host-integration-contract.md), устранены duplicate-init
+и teardown/export проблемы diagnostic UI. Эти изменения не заменяют реальную
+game integration и не повышают автоматически оценку 65–75%.
