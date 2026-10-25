@@ -1,4 +1,4 @@
-import camera_fixture
+import camera_fixture, upload_range_fixture
 import std/jsffi
 import softgfx/backends/web
 import territory_fixture, instance_fixture, post_fixture, environment_fixture, culling_fixture, motion_fixture, dirty_fixture, workload_fixture
@@ -9,6 +9,7 @@ proc item(a: JsObject; i: int): int {.importjs: "#[#]".}
 proc frameBytes(): JsObject {.importjs: "new Uint8Array(16384)".}
 proc ready() {.importjs: "(document.getElementById('status').textContent='PASS')".}
 let device = acquire(canvas(),legacy())
+runUploadRangeProbe(device.ctx,device.caps)
 let pixel = bytes()
 runTerritoryProbe(device.ctx, device.caps, proc(x,y: int): array[4,uint8] =
   device.ctx.readPixels(x,y,1,1,0x1908,0x1401,pixel)

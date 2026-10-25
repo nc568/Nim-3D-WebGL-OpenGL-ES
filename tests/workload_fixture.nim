@@ -3,7 +3,7 @@ import std/json
 import softgfx, softgfx/[geometry, culling]
 import instance_fixture
 when defined(js):
-  proc trackRanges(gl: Context) {.importjs: """(function(g){const b=g.bufferSubData;g._ranges=[];g._restoreRanges=()=>{g.bufferSubData=b;};g.bufferSubData=function(t,o,d){g._ranges.push([o,d.byteLength]);g._rangeData=d;return b.call(g,t,o,d);};})(#)""".}
+  proc trackRanges(gl: Context) {.importjs: """(function(g){const b=g.bufferSubData;g._ranges=[];g._restoreRanges=()=>{g.bufferSubData=b;};g.bufferSubData=function(...a){g._ranges.push([a[1],a.length>=5?a[4]*a[2].BYTES_PER_ELEMENT:a[2].byteLength]);g._rangeData=a[2];return b.apply(g,a);};})(#)""".}
   proc checkRange(gl: Context; offset, size: int): bool {.importjs: "(function(g,o,s){return g._ranges.length===1 && g._ranges[0][0]===o && g._ranges[0][1]===s;})(#,#,#)".}
   # Intentional pinned-codegen assertion on private storage; not a public API.
   proc sharedShadow(gl: Context; r: Renderer): bool {.importjs: "(function(g,r){return r.instanceData instanceof Float32Array && g._rangeData.buffer===r.instanceData.buffer;})(#,#)".}

@@ -181,12 +181,19 @@ proc uploadInstancesRange*(gl: Context; stream: var InstanceStream; data: seq[fl
     stream.copied = false
   else:
     copyInstanceStorage(stream,data,first,count)
-  if stream.used != count or stream.first != first:
-    stream.view = stream.storage.subarray(first*InstanceFloats,(first+count)*InstanceFloats)
-    stream.first = first
-    stream.used = count
   gl.bindBuffer(0x8892,stream.buffer)
-  gl.bufferSubData(0x8892,first*InstanceBytes,stream.view)
+  if stream.mode == coreInstancing:
+    # WebGL2 offsets/counts are in SOURCE ELEMENTS, destination offset in bytes.
+    # Avoid a new subarray wrapper whenever the dirty span changes.
+    gl.bufferSubData(0x8892,first*InstanceBytes,stream.storage,
+      first*InstanceFloats,count*InstanceFloats)
+  else:
+    # WebGL1 has only the three-argument overload. Cache its range view.
+    if stream.used != count or stream.first != first:
+      stream.view = stream.storage.subarray(first*InstanceFloats,(first+count)*InstanceFloats)
+      stream.first = first
+      stream.used = count
+    gl.bufferSubData(0x8892,first*InstanceBytes,stream.view)
 
 proc uploadInstances*(gl: Context; stream: var InstanceStream; data: seq[float32]; count: int) =
   gl.uploadInstancesRange(stream,data,0,count)

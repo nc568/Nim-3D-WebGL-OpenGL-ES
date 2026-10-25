@@ -40,9 +40,18 @@ function defaults(current,frames=96,cycles=2){
  return validate({schemaVersion:1,generator:'grid-v1',...current,frames,cycles,cases},current);
 }
 function load(file,current){
- const stat=fs.statSync(file);
- if(!stat.isFile()||stat.size>maxBytes)throw Error('Recipe must be a regular JSON file <=16 KiB');
- const bytes=fs.readFileSync(file);if(bytes.length>maxBytes)throw Error('Recipe exceeds 16 KiB');
+ // Open once: a path replacement cannot change the file between size/read checks.
+ // NONBLOCK prevents opening a FIFO from waiting before fstat can reject it.
+ const fd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NONBLOCK);
+ let bytes;
+ try {
+  const stat=fs.fstatSync(fd);
+  if(!stat.isFile()||stat.size>maxBytes)throw Error('Recipe must be a regular JSON file <=16 KiB');
+  const buffer=Buffer.alloc(maxBytes+1);let size=0;
+  while(size<buffer.length){const n=fs.readSync(fd,buffer,size,buffer.length-size,null);if(!n)break;size+=n;}
+  if(size>maxBytes)throw Error('Recipe exceeds 16 KiB');
+  bytes=buffer.subarray(0,size);
+ }finally{fs.closeSync(fd);}
  let value;try{value=JSON.parse(bytes.toString('utf8'));}catch{throw Error('Invalid soak recipe JSON');}
  return validate(value,current);
 }

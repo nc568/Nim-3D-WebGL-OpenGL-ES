@@ -112,6 +112,7 @@ jobs:
             build/workload-browser.json
             build/release-chromium.json
             build/gpu-evidence-chromium.json
+            build/extended-*.json
             build/soak-chromium.json
             build/soak-recipe-chromium.json
             build/replay-*.json
@@ -238,6 +239,7 @@ jobs:
           path: |
             build/release-*.json
             build/gpu-evidence-*.json
+            build/extended-*.json
             build/soak-*.json
             build/inspector-*.json
             build/cross-*.json

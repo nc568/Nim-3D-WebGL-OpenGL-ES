@@ -20,5 +20,16 @@ try {
  fs.writeFileSync(file,' '.repeat(16385));assert.throws(()=>load(file,current));
  fs.writeFileSync(file,'not-json');assert.throws(()=>load(file,current),/Invalid soak recipe JSON/);
  assert.throws(()=>load(dir,current));
+ // Short reads must not truncate JSON; a file growing after fstat is still bounded.
+ fs.writeFileSync(file,JSON.stringify(base));
+ const read=fs.readSync,stat=fs.fstatSync;let total=0;
+ try {
+  fs.readSync=(fd,b,o,n,p)=>{const result=read(fd,b,o,Math.min(n,7),p);total+=result;return result;};
+  assert.deepEqual(load(file,current),base);assert(total>7);
+  fs.writeFileSync(file,' '.repeat(32768));total=0;
+  fs.fstatSync=fd=>({isFile:()=>true,size:1});
+  assert.throws(()=>load(file,current),/exceeds 16 KiB/);assert.equal(total,16385);
+ }finally{fs.readSync=read;fs.fstatSync=stat;}
+
 }finally{fs.rmSync(dir,{recursive:true});}
 console.log('Soak recipes: strict schema / code identity / bounded inputs / subsets PASS');

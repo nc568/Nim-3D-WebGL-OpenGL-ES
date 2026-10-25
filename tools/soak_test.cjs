@@ -1,12 +1,13 @@
 const fs=require('fs'),assert=require('assert/strict');
 const {installResourceTracker}=require('./resource_tracker.cjs');
 const recipes=require('./soak_recipe.cjs');
-module.exports=async function soak(browser,engine) {
+module.exports=async function soak(browser,engine,{extended=false}={}) {
  const current=recipes.identity();
  if(process.env.SOAK_RECIPE_FILE&&(process.env.SOAK_FRAMES||process.env.SOAK_CYCLES))throw Error('Do not mix recipe and frame/cycle overrides');
- const recipe=process.env.SOAK_RECIPE_FILE?recipes.load(process.env.SOAK_RECIPE_FILE,current):recipes.defaults(current,Number(process.env.SOAK_FRAMES||96),Number(process.env.SOAK_CYCLES||2));
+ if(extended&&process.env.SOAK_RECIPE_FILE)throw Error('Extended checkpoint does not import a recipe');
+ const recipe=extended?recipes.defaults(current,240,3):process.env.SOAK_RECIPE_FILE?recipes.load(process.env.SOAK_RECIPE_FILE,current):recipes.defaults(current,Number(process.env.SOAK_FRAMES||96),Number(process.env.SOAK_CYCLES||2));
  const {frames,cycles}=recipe;
- const tag=process.env.SOAK_RECIPE_FILE?'replay':'soak';
+ const tag=extended?'extended':process.env.SOAK_RECIPE_FILE?'replay':'soak';
  // Verify the bytes actually served, not merely a possibly stale local build.
  const response=await fetch('http://127.0.0.1:8080/browser_soak.js',{signal:AbortSignal.timeout(10000)});
  assert(response.ok,'Scenario bundle HTTP failure');

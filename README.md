@@ -399,3 +399,5 @@ capture не является полным replay игры. [Инструкци�
 Нагрузочный прогон сохраняет проверяемый JSON recipe с code hashes; доступен
 standalone replay и ручные увеличенные budgets в Actions. Это replay test workload,
 не inspector capture/игрового состояния. [Инструкция](docs/validation-soak-recipes.md).
+
+- [WebGL2 range upload optimization, regression probes and automatic extended soak](docs/validation-upload-ranges.md)

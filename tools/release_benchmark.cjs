@@ -69,6 +69,7 @@ module.exports = async function benchmark(browser, engine) {
   }
   await require('./gpu_evidence.cjs').collect(browser,engine);
   await require('./soak_test.cjs')(browser,engine);
+  await require('./soak_test.cjs')(browser,engine,{extended:true});
   await require('./inspector_test.cjs')(browser,engine);
   assert.deepEqual(errors,[]);report.passed=true;
   console.log('Release CPU benchmark PASS:',engine,report.rows.length,'cases');

@@ -2,7 +2,7 @@
 import softgfx, softgfx/geometry
 import instance_fixture
 when defined(js):
-  proc track(gl: Context) {.importjs: """(function(g){g._dirty={u:0,b:0,failU:0,failB:0,after:false,bytes:0,offset:0};const u=g.uniform4f,b=g.bufferSubData;g._dirty.restore=()=>{g.uniform4f=u;g.bufferSubData=b;};g.uniform4f=function(...a){g._dirty.u++;if(--g._dirty.failU===0)throw Error('injected uniform failure');return u.apply(g,a);};g.bufferSubData=function(...a){g._dirty.b++;g._dirty.offset=a[1];g._dirty.bytes=a[2].byteLength;if(--g._dirty.failB===0)throw Error('injected buffer failure');const v=b.apply(g,a);if(g._dirty.after){g._dirty.after=false;throw Error('injected post-upload failure');}return v;};})(#)""".}
+  proc track(gl: Context) {.importjs: """(function(g){g._dirty={u:0,b:0,failU:0,failB:0,after:false,bytes:0,offset:0};const u=g.uniform4f,b=g.bufferSubData;g._dirty.restore=()=>{g.uniform4f=u;g.bufferSubData=b;};g.uniform4f=function(...a){g._dirty.u++;if(--g._dirty.failU===0)throw Error('injected uniform failure');return u.apply(g,a);};g.bufferSubData=function(...a){g._dirty.b++;g._dirty.offset=a[1];g._dirty.bytes=a.length>=5?a[4]*a[2].BYTES_PER_ELEMENT:a[2].byteLength;if(--g._dirty.failB===0)throw Error('injected buffer failure');const v=b.apply(g,a);if(g._dirty.after){g._dirty.after=false;throw Error('injected post-upload failure');}return v;};})(#)""".}
   proc uniforms(gl: Context): int {.importjs: "#._dirty.u".}
   proc buffers(gl: Context): int {.importjs: "#._dirty.b".}
   proc failUniform(gl: Context) {.importjs: "(#._dirty.failU=2)".}
@@ -17,7 +17,7 @@ when defined(js):
 
 when defined(js):
   import softgfx/backends/web as low
-  proc trackStorage(gl: Context) {.importjs: """(function(g){const b=g.bufferSubData;g._restoreStorage=()=>{g.bufferSubData=b;delete g._lastStorage;};g.bufferSubData=function(t,o,d){g._lastStorage=d;return b.call(g,t,o,d);};})(#)""".}
+  proc trackStorage(gl: Context) {.importjs: """(function(g){const b=g.bufferSubData;g._restoreStorage=()=>{g.bufferSubData=b;delete g._lastStorage;};g.bufferSubData=function(...a){g._lastStorage=a[2];return b.apply(g,a);};})(#)""".}
   proc sameBacking(gl: Context; data: seq[float32]): bool {.importjs: "(#._lastStorage.buffer === #.buffer)".}
   proc floatUpload(gl: Context): bool {.importjs: "(#._lastStorage instanceof Float32Array)".}
   proc firstUpload(gl: Context): float32 {.importjs: "#._lastStorage[0]".}

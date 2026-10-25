@@ -60,3 +60,10 @@ Standalone replay сохраняет `replay-ENGINE.json`/`replay-recipe-ENGINE.
 через standalone CLI из записанного recipe; его checkpoints/counters/resources
 сравниваются с исходным запуском в том же engine/environment. Этот дополнительный
 replay не включён в приведённые выше 8640 scenario frames основного soak.
+
+### Автоматический extended checkpoint (пакет 32)
+
+Из-за отсутствия Actions-write у интеграции ручной запуск пакета 31 не состоялся
+(HTTP403). Теперь browser release suite дополнительно выполняет фиксированный
+240×3 checkpoint через обычную push/PR CI. Его `extended-*.json` отделены от
+базовых и replay outputs. Детали: [validation-upload-ranges.md](validation-upload-ranges.md).
