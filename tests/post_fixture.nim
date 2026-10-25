@@ -46,7 +46,9 @@ proc runPostCacheProbe(ctx: Context; caps: Capabilities; read: FrameReader) =
       doAssert p.postUniformStats.calls == before+6 and read() == partial
     when defined(js):
       for after in [false,true]:
-        p.invalidatePostUniforms()
+        # Start from VALID cache; fail midway through two changed groups.
+        s.fxaa = not s.fxaa
+        s.exposure = if after: 0.75'f32 else: 0.5'f32
         failPost(ctx,after)
         var rejected = false
         try: p.cachedFrame(r,s)

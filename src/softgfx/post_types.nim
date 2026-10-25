@@ -69,6 +69,8 @@ proc retainPostUniforms*(c: PostUniformCache; w,h: int; s: PostSettings; mask: i
   c.width = w; c.height = h
   c.fxaa = s.fxaa; c.dither = s.dither
   c.exposure = postFloat(s.exposure); c.vignette = postFloat(s.vignette)
-  for bit in [1,2,4,8,16]:
+  var bit = 1
+  while bit <= 16:
     if (mask and bit) == 0 and c.skips < high(int): inc c.skips
+    bit = bit shl 1
   c.valid = true
