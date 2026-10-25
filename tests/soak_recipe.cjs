@@ -2,6 +2,10 @@ const assert=require('assert/strict'),fs=require('fs'),os=require('os'),path=req
 const {validate,defaults,load}=require('../tools/soak_recipe.cjs');
 const current={sourceRevision:'a'.repeat(40),bundleSha256:'b'.repeat(64),runnerSha256:'c'.repeat(64)};
 const base=defaults(current);
+for(const frames of [96,240,960])for(const cycles of [2,3,10]) {
+ const recipe=defaults(current,frames,cycles);assert.equal(recipe.frames,frames);assert.equal(recipe.cycles,cycles);
+ assert(recipe.frames*recipe.cycles*recipe.cases.length<=120000);
+}
 assert.equal(base.cases.length,12);assert.equal(base.frames*base.cycles*12,2304);
 const edit=fn=>{const v=structuredClone(base);fn(v);return v;};
 for(const v of [edit(v=>v.extra='x'),edit(v=>v.sourceRevision=['a'.repeat(40)]),edit(v=>v.frames=NaN),edit(v=>v.cycles=1),edit(v=>v.frames=1e9),
@@ -20,6 +24,14 @@ try {
  fs.writeFileSync(file,' '.repeat(16385));assert.throws(()=>load(file,current));
  fs.writeFileSync(file,'not-json');assert.throws(()=>load(file,current),/Invalid soak recipe JSON/);
  assert.throws(()=>load(dir,current));
+ if(process.platform!=='win32') {
+  const fifo=path.join(dir,'fifo');require('child_process').execFileSync('mkfifo',[fifo]);
+  // A subprocess timeout turns accidental blocking on a named pipe into failure.
+  const helper=path.resolve(__dirname,'../tools/soak_recipe.cjs');
+  require('child_process').execFileSync(process.execPath,['-e',
+   `require('assert/strict').throws(()=>require(${JSON.stringify(helper)}).load(${JSON.stringify(fifo)}),/regular JSON file/)`],{timeout:3000});
+ }
+
  // Short reads must not truncate JSON; a file growing after fstat is still bounded.
  fs.writeFileSync(file,JSON.stringify(base));
  const read=fs.readSync,stat=fs.fstatSync;let total=0;

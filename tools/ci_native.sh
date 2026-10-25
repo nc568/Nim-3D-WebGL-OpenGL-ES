@@ -48,3 +48,5 @@ run build/ci-bench-llvm.log "$NIM" c -r -d:release --cc:clang \
 run build/ci-bench-qbe.log "$NIM_CPROC" c -r -d:release -d:nimCproc --threads:off --mm:arc \
   --cc:gcc --gcc.exe:"$PWD/tools/cproc_cc.py" --gcc.linkerexe:"$PWD/tools/cproc_cc.py" \
   --nimcache:build/cache-bench-qbe -o:build/bench_qbe tests/bench_release.nim
+
+node tools/percentile_report.cjs

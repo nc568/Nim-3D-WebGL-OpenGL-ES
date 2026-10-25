@@ -67,3 +67,18 @@ replay не включён в приведённые выше 8640 scenario fram
 (HTTP403). Теперь browser release suite дополнительно выполняет фиксированный
 240×3 checkpoint через обычную push/PR CI. Его `extended-*.json` отделены от
 базовых и replay outputs. Детали: [validation-upload-ranges.md](validation-upload-ranges.md).
+
+
+### Два standalone replay checkpoints (пакет 34)
+
+CI теперь отдельно воспроизводит первый preset и базового, и extended report:
+192 + 720 scenario frames при стандартных budgets, 10 + 33 oracle checkpoints.
+Standalone CLI по-прежнему пишет `replay-ENGINE.json`; CI harness после каждой
+попытки сохраняет его как `replay-soak-chromium.json` или
+`replay-extended-chromium.json`, аналогично recipes/failure screenshot. Исходные
+soak/extended reports не меняются. Failed attempts тоже сохраняются, stale outputs
+очищаются до первого запуска. Node mock tests проверяют orchestration/error paths,
+но не заменяют реальное browser execution.
+
+Импорт recipe дополнительно проверяется на POSIX FIFO (в child process с timeout),
+а все девять комбинаций ручных workflow budgets — на общий frame cap.

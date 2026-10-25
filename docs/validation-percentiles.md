@@ -29,7 +29,7 @@ GPU — нет; warmup/reset/profile/autoscale правила не измене�
 ## Парный release benchmark
 
 `tests/percentile_benchmark.nim`: постоянные, монотонно меняющиеся и перемешанные
-samples; **20 warmups + 41 samples**, каждый sample = **64 updates × 2 reads**.
+samples; **20 warmups + 41 samples**, каждый sample = **1024 updates × 2 reads** (первоначальные 64 увеличены в пакете 34).
 Порядок optimized/reference меняется на каждом sample. Сравниваются checksums,
 raw durations сохраняются; нет flaky timing pass/fail threshold.
 
@@ -49,3 +49,17 @@ noise; абсолютные результаты разных машин нел�
 - Node tests проверяют duplicate init/stop preservation/failed-download cleanup;
   browser tests — duplicate scripts, dispose/remount, сохранение кнопки и captures,
   отсутствие лишних timers/GL readback. OS download-dialog acceptance не заявляется.
+
+
+### Report hardening (пакет 34)
+
+Первый запуск d12c5ce / Actions 40238286527 показал quantization коротких 64-frame
+серий: Chromium mixed pattern median 0.1 ms против 2.5 ms copy/sort; WebKit ordered
+median 0 ms при reference 2 ms. **Ноль не означает нулевую стоимость.** Поэтому
+текущий benchmark использует 1024-frame series, сохраняя alternating order и 41
+raw samples; zero durations всё равно валидны, ratio из них не вычисляется.
+
+Единый `tools/percentile_report.cjs` проверяет browser/native schema, counts,
+finite nonnegative timings, median/p95 и patterns. Native aggregate сохраняется
+в `percentile-native.json`, а medians выводятся в Actions annotations. Node tests
+отклоняют malformed reports/quantiles и разрешают zero-duration clock samples.

@@ -28,20 +28,9 @@ module.exports = async function benchmark(browser, engine) {
    report.rows.push(r);
   }
   report.percentiles=await page.evaluate(()=>JSON.parse(softgfxPercentileBench()));
-  const stats=report.percentiles;
-  assert.equal(stats.warmup,20);assert.equal(stats.samples,41);
-  assert.equal(stats.framesPerSample,64);assert.equal(stats.readsPerFrame,2);
-  assert.deepEqual(stats.rows.map(r=>r.pattern),[0,1,2]);
-  for(const row of stats.rows) {
-   assert(Number.isFinite(row.checksum)&&row.checksum>0);
-   for(const key of ['ordered','sortReference']) {
-    const s=row[key];assert.equal(s.rawMs.length,41);
-    assert(s.rawMs.every(v=>Number.isFinite(v)&&v>=0));
-    const sorted=[...s.rawMs].sort((a,b)=>a-b);
-    assert.equal(s.medianMs,sorted[20]);assert.equal(s.p95Ms,sorted[38]);
-   }
-  }
-  console.log('::notice title=Percentile CPU evidence::'+JSON.stringify({engine,framesPerSample:64,rows:stats.rows.map(r=>({pattern:r.pattern,orderedMedianMs:r.ordered.medianMs,sortMedianMs:r.sortReference.medianMs}))}));
+  const percentileReport=require('./percentile_report.cjs');
+  percentileReport.validate(report.percentiles);
+  console.log('::notice title=Percentile CPU evidence::'+JSON.stringify({engine,framesPerSample:report.percentiles.framesPerSample,rows:percentileReport.medians(report.percentiles)}));
   report.submission=[];
   for(const legacy of [false,true]) for(const fallback of [false,true]) for(const moving of [false,true]) {
    await page.goto('http://127.0.0.1:8080/?'+[legacy?'webgl1':'',fallback?'fallback':''].filter(Boolean).join('&'));

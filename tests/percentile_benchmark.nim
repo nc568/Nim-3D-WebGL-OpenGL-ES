@@ -30,7 +30,7 @@ proc summary(values: seq[float64]): JsonNode =
 proc percentileBenchmark*(): string =
   const warmup = 20
   const samples = 41
-  const frames = 64
+  const frames = 1024
   var rows = newJArray()
   for pattern in 0..2:
     var optimized: FrameWindow

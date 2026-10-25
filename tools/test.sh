@@ -87,3 +87,7 @@ printf '<!doctype html><meta charset="utf-8"><canvas id="scene" width="192" heig
 node tests/resource_tracker.cjs
 
 node tests/soak_recipe.cjs
+
+node tests/percentile_report.cjs
+
+node tests/soak_replay_runner.cjs
