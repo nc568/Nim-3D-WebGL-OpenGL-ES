@@ -6,8 +6,15 @@ module.exports=async function soak(browser,engine) {
  if(process.env.SOAK_RECIPE_FILE&&(process.env.SOAK_FRAMES||process.env.SOAK_CYCLES))throw Error('Do not mix recipe and frame/cycle overrides');
  const recipe=process.env.SOAK_RECIPE_FILE?recipes.load(process.env.SOAK_RECIPE_FILE,current):recipes.defaults(current,Number(process.env.SOAK_FRAMES||96),Number(process.env.SOAK_CYCLES||2));
  const {frames,cycles}=recipe;
- fs.writeFileSync(`build/soak-recipe-${engine}.json`,JSON.stringify(recipe,null,2));
- const report={schemaVersion:2,engine,version:await browser.version(),frames,cycles,recipe,
+ const tag=process.env.SOAK_RECIPE_FILE?'replay':'soak';
+ // Verify the bytes actually served, not merely a possibly stale local build.
+ const response=await fetch('http://127.0.0.1:8080/browser_soak.js',{signal:AbortSignal.timeout(10000)});
+ assert(response.ok,'Scenario bundle HTTP failure');
+ const hash=require('crypto').createHash('sha256');let servedBytes=0;
+ for await(const chunk of response.body){servedBytes+=chunk.length;if(servedBytes>8*1024*1024)throw Error('Served bundle exceeds limit');hash.update(chunk);}
+ assert.equal(hash.digest('hex'),recipe.bundleSha256,'Served bundle fingerprint mismatch');
+ fs.writeFileSync(`build/${tag}-recipe-${engine}.json`,JSON.stringify(recipe,null,2));
+ const report={schemaVersion:2,engine,replay:tag==='replay',version:await browser.version(),frames,cycles,recipe,
   executionRevision:current.sourceRevision,platform:process.platform,arch:process.arch,
   generator:"grid-v1 (deterministic formulas, no RNG)",
   scope:'Provisional deterministic soak; API handle balance, not driver/JS memory proof',passed:false,cases:[]};
@@ -85,8 +92,8 @@ module.exports=async function soak(browser,engine) {
   report.error=String(e);report.pageErrors=errors;report.cursor=cursor;
   try {report.failedTick=await page.evaluate(()=>globalThis.soakTick??null);} catch {}
   try {report.failureResources=await page.evaluate(()=>soakTracker.snapshot());} catch {}
-  try {await page.screenshot({path:`build/soak-${engine}-failure.png`});} catch {}
+  try {await page.screenshot({path:`build/${tag}-${engine}-failure.png`});} catch {}
   throw e;
  }
- finally {fs.writeFileSync(`build/soak-${engine}.json`,JSON.stringify(report,null,2));await page.close();}
+ finally {fs.writeFileSync(`build/${tag}-${engine}.json`,JSON.stringify(report,null,2));await page.close();}
 };

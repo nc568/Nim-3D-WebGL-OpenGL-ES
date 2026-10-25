@@ -4,7 +4,8 @@
 
 `soak-recipe-ENGINE.json` задаёт generator grid-v1, frames/cycles и ordered presets
 (WebGL API, count, fallback). SHA-256 compiled `browser_soak.js` и runner sources
-проверяются до запуска scenario. Git revision — provenance metadata; authoritative
+проверяются до запуска scenario. Проверяется также SHA-256 файла, реально отдаваемого
+локальным HTTP server, чтобы stale served build не совпадал только на диске. Git revision — provenance metadata; authoritative
 code identity — hashes, поэтому documentation-only commit не ломает replay.
 
 Это воспроизведение **тестового workload**, не импорт diagnostic capture из inspector
@@ -52,3 +53,10 @@ workflow_dispatch предлагает frames 96/240/960 и cycles 2/3/10. Push/
 плюс **396 oracle draws/engine** (11 checkpoints на цикл). Это всё ещё bounded
 iteration soak, не 8/24-часовая проверка и не доказательство отсутствия driver/JS
 heap leaks. Итог прогона подтверждается конкретным Actions run, не наличием рецепта.
+
+
+Standalone replay сохраняет `replay-ENGINE.json`/`replay-recipe-ENGINE.json`, не
+перезаписывая исходный soak report. В CI первый preset дополнительно выполняется
+через standalone CLI из записанного recipe; его checkpoints/counters/resources
+сравниваются с исходным запуском в том же engine/environment. Этот дополнительный
+replay не включён в приведённые выше 8640 scenario frames основного soak.

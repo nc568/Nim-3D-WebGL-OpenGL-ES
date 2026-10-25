@@ -5,7 +5,7 @@ const digest=value=>crypto.createHash('sha256').update(value).digest('hex');
 function identity(root=process.cwd()) {
  let sourceRevision=null;
  try{sourceRevision=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();}catch{}
- const files=['tools/soak_test.cjs','tools/resource_tracker.cjs','tools/soak_recipe.cjs'];
+ const files=['tools/soak_test.cjs','tools/resource_tracker.cjs','tools/soak_recipe.cjs','tools/run_soak.cjs'];
  return {sourceRevision,bundleSha256:digest(fs.readFileSync(path.join(root,'build/browser_soak.js'))),
   runnerSha256:digest(Buffer.concat(files.map(name=>Buffer.concat([Buffer.from(name+'\0'),fs.readFileSync(path.join(root,name))]))))};
 }

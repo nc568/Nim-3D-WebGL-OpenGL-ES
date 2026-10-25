@@ -83,6 +83,7 @@ jobs:
           TEST_UI=1 USE_BUNDLED_LIBS=1 node tools/browser_test.cjs 2>&1 | tee build/ci-browser.log
           USE_BUNDLED_LIBS=1 node tools/autoscale_test.cjs 2>&1 | tee build/ci-autoscale.log
           USE_BUNDLED_LIBS=1 node tools/timing_test.cjs 2>&1 | tee build/ci-timing.log
+          USE_BUNDLED_LIBS=1 node tools/check_soak_replay.cjs 2>&1 | tee build/ci-replay.log
       - name: Workload browser report
         run: python3 tools/collect_workloads.py browser
       - name: Browser failure diagnostics
@@ -91,7 +92,7 @@ jobs:
         run: |
           python3 - <<'PYDIAG'
           from pathlib import Path
-          for name in ('ci-js.log', 'ci-browser.log', 'ci-autoscale.log', 'ci-timing.log'):
+          for name in ('ci-js.log', 'ci-browser.log', 'ci-autoscale.log', 'ci-timing.log', 'ci-replay.log'):
               path = Path('build') / name
               if path.exists():
                   text = '\n'.join(path.read_text(errors='replace').splitlines()[-35:])[-8000:]
@@ -113,6 +114,7 @@ jobs:
             build/gpu-evidence-chromium.json
             build/soak-chromium.json
             build/soak-recipe-chromium.json
+            build/replay-*.json
             build/inspector-chromium.json
 
   native:
