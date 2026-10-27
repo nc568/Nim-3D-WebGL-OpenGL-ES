@@ -26,6 +26,7 @@ for compiler in compilers:
     assert len(rows) == 6
     assert {(r['instances'], r['dense']) for r in rows} == {(n, d) for n in (64,1024,8192) for d in (False,True)}
     for r in rows:
+        assert r['cellVisits'] == r['occupiedCells'] and 0 < r['cellVisits'] <= r['instances']
         assert r['unchangedSkipped'] == r['iterations'] == 12 and r['buildMode'] == 'debug'
         for k, v in r.items():
             if k.endswith('Ms'): assert math.isfinite(v) and v >= 0

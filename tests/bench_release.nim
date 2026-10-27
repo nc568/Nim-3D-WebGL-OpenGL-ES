@@ -66,6 +66,7 @@ proc benchmark(count: int; moving, dense: bool): string =
     let actual = view.collectVisible(grid,selected,stats)
     let queryMs = clock()-start
     require(actual == visible)
+    require(stats.cellVisits == stats.occupiedCells and stats.cellVisits <= count)
     for i in 0..<visible: require(flat[i] == selected[i])
     if dense: require(visible == count)
     if step >= warmup:
@@ -78,7 +79,7 @@ proc benchmark(count: int; moving, dense: bool): string =
   result = $(%*{"schemaVersion":1,"buildMode":"release","scope":"CPU only; not FPS",
     "instances":count,"moving":moving,"dense":dense,"warmup":warmup,"samples":samples,
     "visible":visible,"changedRecords":changedRecords,"skipped":skipped,
-    "instanceTests":stats.instanceTests,"orderScans":stats.orderScans,
+    "cellVisits":stats.cellVisits,"occupiedCells":stats.occupiedCells,"instanceTests":stats.instanceTests,"orderScans":stats.orderScans,
     "packing":summary(packing),"forcedPacking":summary(forcing),"rebuild":summary(rebuilding),
     "flatQuery":summary(flatQuery),"gridQuery":summary(gridQuery)})
 when defined(js):

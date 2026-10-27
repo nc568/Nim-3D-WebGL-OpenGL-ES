@@ -15,6 +15,7 @@ module.exports = async function benchmark(browser, engine) {
   for(const count of [64,1024,8192]) for(const moving of [false,true]) for(const dense of [false,true]) {
    const r=await page.evaluate(({count,moving,dense})=>JSON.parse(softgfxBench(count,moving,dense)),{count,moving,dense});
    assert.equal(r.buildMode,'release');assert.equal(r.warmup,20);assert.equal(r.samples,41);
+   assert.equal(r.cellVisits,r.occupiedCells);assert(r.cellVisits>0&&r.cellVisits<=count);
    assert.equal(r.instances,count);assert.equal(r.moving,moving);assert.equal(r.dense,dense);
    assert(dense ? r.visible===count : r.visible>0 && r.visible<count);
    assert.equal(r.changedRecords,moving?count*41:0);assert.equal(r.skipped,moving?0:41);

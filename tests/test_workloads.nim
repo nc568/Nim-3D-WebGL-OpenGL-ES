@@ -57,13 +57,14 @@ for count in [64,1024,8192]:
       doAssert actual == expected
     let gridMs = milliseconds()-gridStart
     for i in 0..<expected: doAssert selected[i] == flat[i]
+    doAssert stats.cellVisits == stats.occupiedCells and stats.cellVisits <= count
     if dense:
       doAssert expected == count and stats.orderScans == count and stats.orderComparisons == 0
     else:
       doAssert stats.orderScans == 0 and stats.instanceTests < count div 2
     var record = %*{"compiler":compiler,"buildMode":buildMode,"instances":count,"iterations":iterations,
       "dense":dense,"visible":expected,"instanceTests":stats.instanceTests,
-      "orderScans":stats.orderScans,"orderComparisons":stats.orderComparisons,
+      "cellVisits":stats.cellVisits,"occupiedCells":stats.occupiedCells,"orderScans":stats.orderScans,"orderComparisons":stats.orderComparisons,
       "unchangedSkipped":skipped,"unchangedPackMs":unchangedMs,"forcedPackMs":forcedMs,
       "movingPackMs":movingMs,"rebuildMs":rebuildMs,"flatQueryMs":flatMs,"gridQueryMs":gridMs}
     echo "CPU_WORKLOAD ",$record

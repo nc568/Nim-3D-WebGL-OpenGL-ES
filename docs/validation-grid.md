@@ -54,3 +54,10 @@ visibleInstances; относятся к одному успешному query, �
 Обновление пакета 21: описание обязательного O(N) clear/scan выше относится к
 первой реализации. Sparse queries теперь используют in-place prefix sorting;
 dense queries сохраняют scan. Подробности и новые счётчики — validation-workloads.md.
+
+## Active-cell traversal (пакет 35)
+
+Query больше не сканирует пустые heads, rebuild очищает только предыдущие активные
+heads. Дополнительный bounded список и `cellVisits` описаны в
+[validation-active-cells.md](validation-active-cells.md). Stable source-order и
+conservative union bounds не меняются; число sort comparisons может отличаться.

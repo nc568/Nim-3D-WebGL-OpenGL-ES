@@ -75,3 +75,42 @@ for hits in [0,1,2,3,4,7,8,16,32,64,128,256,768,1024]:
   if hits <= 32: doAssert stats.orderScans == 0
   if hits >= 256: doAssert stats.orderScans == poses.len
 echo "Grid sparse heapsort / dense transitions / untouched tail PASS"
+
+# A maximally divided grid must visit only occupied cells, not all 32768 slots.
+var sparseGrid = initSpatialGrid(Bounds(lower:[-16.0,-16.0,-16.0],upper:[16.0,16.0,16.0]),[32,32,32],32)
+var wideMatrix = identity()
+wideMatrix[0] = 0.04; wideMatrix[5] = 0.04; wideMatrix[10] = 0.04
+let wide = frustum(wideMatrix)
+var small = newSeq[Instance](8)
+for tick in 0..<64:
+  for i in 0..<small.len:
+    small[i] = instance([float32((tick+i*3) mod 32)-15.5'f32,
+      float32((tick*7+i*5) mod 32)-15.5'f32,float32((tick*11+i*7) mod 32)-15.5'f32])
+  sparseGrid.rebuild(local,small)
+  let expected = wide.collectVisible(local,small,flat)
+  doAssert wide.collectVisible(sparseGrid,indexed,stats) == expected
+  doAssert expected == 8 and stats.cellVisits == 8 and stats.occupiedCells == 8
+  for i in 0..<expected: doAssert indexed[i] == flat[i]
+  # Invalid late input must preserve the active list as well as cached bounds.
+  small[7].scale = 0
+  rejected = false
+  try: sparseGrid.rebuild(local,small)
+  except ValueError: rejected = true
+  doAssert rejected and wide.collectVisible(sparseGrid,indexed,stats) == 8
+  doAssert stats.cellVisits == 8
+  sparseGrid.rebuild(local,[instance()])
+  doAssert wide.collectVisible(sparseGrid,indexed,stats) == 1
+  doAssert stats.cellVisits == 1
+  sparseGrid.rebuild(local,[])
+  doAssert wide.collectVisible(sparseGrid,indexed,stats) == 0
+  doAssert stats.cellVisits == 0 and stats.occupiedCells == 0
+# Several records in the same cell produce only one active-cell entry.
+sparseGrid.rebuild(local,[instance(),instance(),instance()])
+doAssert wide.collectVisible(sparseGrid,indexed,stats) == 3
+doAssert stats.cellVisits == 1 and stats.instanceTests == 3
+echo "Active cells / 32768-slot grid / 8->1->0 rebuilds / atomicity / shared cell PASS"
+small.setLen(32)
+for i in 0..<small.len: small[i] = instance([float32(i)-15.5'f32,0,0])
+sparseGrid.rebuild(local,small)
+doAssert wide.collectVisible(sparseGrid,indexed,stats) == 32 and stats.cellVisits == 32
+for i in 0..<32: doAssert indexed[i] == i
